@@ -17,6 +17,9 @@ from .line_detection import LineDetector, DetectedLine
 from .dead_reckoning import DeadReckoning, OdometryState
 from .path_visualization import PathVisualizer
 from .obstacle_map import ObstacleMap, get_default_obstacle_map
+from .hybrid_vision import HybridVisionSystem, VisionFusion
+from .error_recovery import ErrorRecovery, ErrorType, ErrorState
+from .performance_optimizer import PerformanceOptimizer, PerformanceMetrics
 
 __all__ = [
     'TargetDetector',
@@ -36,5 +39,12 @@ __all__ = [
     'PathVisualizer',
     'ObstacleMap',
     'get_default_obstacle_map',
+    'HybridVisionSystem',
+    'VisionFusion',
+    'ErrorRecovery',
+    'ErrorType',
+    'ErrorState',
+    'PerformanceOptimizer',
+    'PerformanceMetrics',
 ]
 

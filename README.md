@@ -100,13 +100,13 @@ Based on the codebase analysis, the challenge likely involves:
 - [x] Sensor fusion (ultrasonic + IR + vision)
 - [x] State machine for navigation modes
 
-### Phase 3: Advanced Features 🎯
+### Phase 3: Advanced Features ✅
 
-- [ ] Hybrid vision system (overhead + onboard)
-- [ ] Obstacle avoidance integration
-- [ ] Error recovery mechanisms
-- [ ] Performance optimization
-- [ ] Real-time visualization
+- [x] Hybrid vision system (overhead + onboard)
+- [x] Obstacle avoidance integration
+- [x] Error recovery mechanisms
+- [x] Performance optimization
+- [x] Real-time visualization
 
 ### Phase 4: Testing & Refinement 🧪
 
@@ -640,6 +640,12 @@ python main.py --robot-ip 192.168.1.216 \
 - **Path Visualization**: Overlays robot path, waypoints, and goal on camera feed images
   - Use `--save-path-images` to save visualization images to `path_images/` directory
   - Use `--display-path-images` to show real-time visualization window
+
+**Phase 3 Features**:
+- **Hybrid Vision**: Integrates overhead and onboard cameras for improved navigation
+- **Error Recovery**: Automatic error detection and recovery behaviors
+- **Performance Optimization**: Adaptive frame skipping, caching, performance monitoring
+- **Enhanced Visualization**: Performance metrics, error status, vision status overlays
 
 ---
 
@@ -1213,6 +1219,57 @@ Initial hackathon code provided by Drift.
 ---
 
 ## 🔄 Recent Updates
+
+### Phase 3: Advanced Features Implementation ✅
+
+**All Phase 3 features have been implemented:**
+
+1. **Hybrid Vision System** (`hybrid_vision.py`):
+   - Integrates overhead camera (global view) with onboard camera (local view)
+   - Fuses vision data from both sources for improved navigation
+   - Overhead camera: Global target detection, robot localization
+   - Onboard camera: Local obstacle detection, target verification
+   - Automatic fusion of targets and obstacles from both sources
+   - Confidence-based weighting (overhead: 70%, onboard: 30%)
+
+2. **Enhanced Obstacle Avoidance Integration**:
+   - Sensor fusion combines ultrasonic, IR, and vision-based obstacles
+   - Pre-mapped obstacles (known positions) + dynamic sensor obstacles
+   - Hybrid vision adds onboard camera obstacle detection
+   - Real-time obstacle updates from multiple sources
+
+3. **Error Recovery Mechanisms** (`error_recovery.py`):
+   - **Stuck Detection**: Detects when robot isn't making progress
+   - **Lost Localization**: Handles cases where robot position is unknown
+   - **Obstacle Blocked**: Detects when path is completely blocked
+   - **Timeout Detection**: Monitors operation duration
+   - **Sensor Failure**: Handles invalid sensor readings
+   - **Recovery Behaviors**: Automatic recovery commands (back up, turn, rotate)
+   - Position history tracking for stuck detection
+
+4. **Performance Optimization** (`performance_optimizer.py`):
+   - **Adaptive Frame Skipping**: Maintains target FPS (10 FPS default)
+   - **Result Caching**: Caches expensive computations
+   - **Processing Time Tracking**: Monitors and optimizes frame processing
+   - **Adaptive Performance**: Adjusts frame skipping based on load
+   - **Performance Metrics**: FPS, processing time, cache hit rate
+   - **Low Power Mode**: Optimized settings for battery operation
+
+5. **Enhanced Real-Time Visualization**:
+   - Performance metrics overlay (FPS, processing time, cache hit rate)
+   - Error status display (shows current error type)
+   - Hybrid vision status (overhead/onboard camera availability)
+   - Enhanced path visualization with all Phase 3 information
+   - Real-time status updates in visualization window
+
+**Files Created**:
+- `hybrid_vision.py`: Hybrid vision system implementation
+- `error_recovery.py`: Error detection and recovery system
+- `performance_optimizer.py`: Performance optimization module
+
+**Files Modified**:
+- `main.py`: Integrated all Phase 3 features into navigation loop
+- `__init__.py`: Added exports for new Phase 3 modules
 
 ### Pre-Mapped Obstacles & Improved Pathfinding ✅
 

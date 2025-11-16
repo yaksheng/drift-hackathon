@@ -30,6 +30,9 @@ from navigation_controller import NavigationController, NavigationState
 from line_detection import LineDetector, DetectedLine
 from dead_reckoning import DeadReckoning
 from path_visualization import PathVisualizer
+from hybrid_vision import HybridVisionSystem, VisionFusion
+from error_recovery import ErrorRecovery, ErrorType
+from performance_optimizer import PerformanceOptimizer
 
 
 class AutonomousNavigation:
@@ -69,6 +72,12 @@ class AutonomousNavigation:
         self.navigation_controller: Optional[NavigationController] = None
         self.dead_reckoning = DeadReckoning()  # For handling camera delay
         self.path_visualizer: Optional[PathVisualizer] = None  # For path overlay
+        
+        # Phase 3: Advanced features
+        self.hybrid_vision: Optional[HybridVisionSystem] = None
+        self.error_recovery = ErrorRecovery()
+        self.performance_optimizer = PerformanceOptimizer()
+        self.operation_start_time: Optional[float] = None
         
         # State
         self.running = False
@@ -123,11 +132,20 @@ class AutonomousNavigation:
             print("   Using pixel coordinates (no world transform)")
             self.path_visualizer = PathVisualizer(world_transform=None)
         
+        # Initialize hybrid vision system
+        self.hybrid_vision = HybridVisionSystem(
+            self.target_detector,
+            self.robot_localizer
+        )
+        
         print("\n" + "=" * 60)
         print("Initialization Complete!")
         print("=" * 60)
         print("📡 Dead reckoning enabled to handle camera delay")
         print("📊 Path visualization enabled")
+        print("🔀 Hybrid vision system enabled (overhead + onboard)")
+        print("🛡️  Error recovery system enabled")
+        print("⚡ Performance optimization enabled")
         return True
     
     async def shutdown(self):
@@ -209,6 +227,7 @@ class AutonomousNavigation:
         
         self.running = True
         last_update = time.time()
+        self.operation_start_time = time.time()
         
         try:
             while self.running:
@@ -216,27 +235,37 @@ class AutonomousNavigation:
                 dt = current_time - last_update
                 last_update = current_time
                 
+                # Phase 3: Performance Optimization - Check if we should process this frame
+                if not self.performance_optimizer.should_process_frame(current_time):
+                    await asyncio.sleep(0.01)  # Small sleep to prevent busy waiting
+                    continue
+                
+                # Start processing timer
+                processing_start = self.performance_optimizer.start_processing()
+                self.performance_optimizer.record_frame(current_time)
+                
                 # Check if camera update is delayed
                 time_since_camera = current_time - self.last_camera_update
                 camera_delayed = time_since_camera > 2.0  # More than 2 seconds
                 
                 goal_line = None
                 targets = []
+                overhead_fusion: Optional[VisionFusion] = None
+                onboard_fusion: Optional[VisionFusion] = None
                 
-                # Get overhead frame if available
+                # Phase 3: Hybrid Vision - Process overhead frame
                 if self.use_overhead_camera and self.overhead_frame is not None:
                     frame = self.overhead_frame.copy()
                     
-                    # Detect blue goal line at top (main objective)
+                    # Use hybrid vision system
+                    overhead_fusion = self.hybrid_vision.process_overhead_frame(frame)
+                    
+                    # Extract results
                     goal_line = self.detect_goal_line(frame)
                     self.goal_line = goal_line
-                    
-                    # Detect targets (for intermediate waypoints)
-                    targets = self.detect_targets(frame)
+                    targets = overhead_fusion.targets if overhead_fusion.targets else []
                     self.current_targets = targets
-                    
-                    # Localize robot
-                    pose = self.localize_robot(frame)
+                    pose = overhead_fusion.robot_pose
                     
                     # Update dead reckoning with camera measurement (ground truth)
                     if pose:
@@ -273,6 +302,55 @@ class AutonomousNavigation:
                             theta=dr_pose[2]
                         )
                         print(f"\r⚠️  Using dead reckoning (no camera: {time_since_camera:.1f}s)", end='', flush=True)
+                
+                # Phase 3: Hybrid Vision - Process onboard frame if available
+                if self.robot_camera and hasattr(self.robot_camera, 'get_frame'):
+                    try:
+                        onboard_frame = self.robot_camera.get_frame()
+                        if onboard_frame is not None:
+                            onboard_fusion = self.hybrid_vision.process_onboard_frame(onboard_frame)
+                    except:
+                        pass  # Onboard camera not available
+                
+                # Phase 3: Fuse vision data
+                if self.hybrid_vision:
+                    fused_vision = self.hybrid_vision.fuse_vision(overhead_fusion, onboard_fusion)
+                    # Use fused targets if available
+                    if fused_vision.targets:
+                        targets = fused_vision.targets
+                        self.current_targets = targets
+                    # Use fused obstacles
+                    if fused_vision.obstacles:
+                        for obs_x, obs_y, obs_radius in fused_vision.obstacles:
+                            from path_planner import Obstacle
+                            obstacle = Obstacle(x=obs_x, y=obs_y, radius=obs_radius, confidence=0.6)
+                            self.path_planner.add_obstacle(obstacle)
+                
+                # Phase 3: Error Recovery - Detect errors
+                error_type = None
+                if self.navigation_controller:
+                    error_type = self.error_recovery.detect_errors(
+                        (self.current_pose.x, self.current_pose.y) if self.current_pose else None,
+                        self.navigation_controller.state,
+                        self.operation_start_time
+                    )
+                    
+                    # Update error recovery with current position
+                    if self.current_pose:
+                        self.error_recovery.update_position((self.current_pose.x, self.current_pose.y))
+                    
+                    # Handle critical errors immediately
+                    if error_type in [ErrorType.SENSOR_FAILURE]:
+                        print(f"\n⚠️  Critical error detected: {error_type.value}")
+                        recovery_cmd = self.error_recovery.get_recovery_command(
+                            (self.current_pose.x, self.current_pose.y) if self.current_pose else None,
+                            self.current_pose.theta if self.current_pose else 0.0
+                        )
+                        if recovery_cmd != (0, 0):
+                            self.robot.set_motors(recovery_cmd[0], recovery_cmd[1])
+                            await self.robot.send()
+                            await asyncio.sleep(0.1)  # Execute recovery command
+                            continue  # Skip normal navigation this cycle
                 
                 # Determine goal position (works with both camera and dead reckoning)
                 goal_pos = None
@@ -344,6 +422,17 @@ class AutonomousNavigation:
                         command.right_motor
                     )
                     
+                    # Phase 3: Error Recovery - Check if we should override command
+                    if error_type and error_type != ErrorType.TIMEOUT:
+                        # Use recovery command instead
+                        recovery_cmd = self.error_recovery.get_recovery_command(
+                            (self.current_pose.x, self.current_pose.y),
+                            self.current_pose.theta
+                        )
+                        if recovery_cmd != (0, 0):
+                            command.left_motor = recovery_cmd[0]
+                            command.right_motor = recovery_cmd[1]
+                    
                     # Apply command to robot
                     self.robot.set_motors(command.left_motor, command.right_motor)
                     self.robot.set_servo(command.servo_angle)
@@ -378,6 +467,31 @@ class AutonomousNavigation:
                             waypoints=waypoints
                         )
                         
+                        # Phase 3: Add performance metrics overlay
+                        metrics = self.performance_optimizer.get_metrics()
+                        metrics_text = f"FPS: {metrics.frame_rate:.1f} | "
+                        metrics_text += f"Proc: {metrics.processing_time*1000:.1f}ms | "
+                        metrics_text += f"Cache: {metrics.cache_hit_rate*100:.0f}%"
+                        cv2.putText(vis_frame, metrics_text, (10, 30),
+                                  cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                        
+                        # Phase 3: Add error status overlay
+                        if error_type:
+                            error_text = f"ERROR: {error_type.value.upper()}"
+                            cv2.putText(vis_frame, error_text, (10, 60),
+                                      cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                        
+                        # Phase 3: Add hybrid vision status
+                        if self.hybrid_vision:
+                            vision_text = "Vision: "
+                            if overhead_fusion and overhead_fusion.overhead_available:
+                                vision_text += "Overhead✓ "
+                            if onboard_fusion and onboard_fusion.onboard_available:
+                                vision_text += "Onboard✓"
+                            if vision_text != "Vision: ":
+                                cv2.putText(vis_frame, vision_text, (10, 90),
+                                          cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+                        
                         # Save or display image if enabled
                         if self.save_path_images:
                             os.makedirs('path_images', exist_ok=True)
@@ -388,17 +502,24 @@ class AutonomousNavigation:
                             cv2.imshow('Navigation Path', vis_frame)
                             cv2.waitKey(1)
                 
+                # Phase 3: End processing timer
+                self.performance_optimizer.end_processing(processing_start)
+                
                 # Print status
                 if self.current_pose:
                     state = self.navigation_controller.get_state() if self.navigation_controller else "UNKNOWN"
                     dr_confidence = self.dead_reckoning.get_confidence()
+                    metrics = self.performance_optimizer.get_metrics()
                     print(f"\rState: {state.value:12s} | "
                           f"Pos: ({self.current_pose.x:.2f}, {self.current_pose.y:.2f}) | "
                           f"Targets: {len(self.current_targets)} | "
-                          f"DR: {dr_confidence:.2f}", end='', flush=True)
+                          f"DR: {dr_confidence:.2f} | "
+                          f"FPS: {metrics.frame_rate:.1f}", end='', flush=True)
                 
-                # Small delay
-                await asyncio.sleep(0.1)
+                # Phase 3: Adaptive sleep based on performance
+                sleep_time = max(0.01, self.performance_optimizer.frame_interval - 
+                               self.performance_optimizer.metrics.processing_time)
+                await asyncio.sleep(sleep_time)
         
         except KeyboardInterrupt:
             print("\n\n⚠️  Interrupted by user")
