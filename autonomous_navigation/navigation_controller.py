@@ -162,11 +162,26 @@ class NavigationController:
         Returns:
             ControlCommand for robot
         """
-        # Check for obstacles first
+        # Check for obstacles first - use Arduino's built-in obstacle avoidance
         if self.check_obstacles():
             if self.state != NavigationState.AVOIDING:
                 self.state = NavigationState.AVOIDING
-            return self.avoid_obstacle()
+                # Enable Arduino's obstacle avoidance mode
+                self.robot.enable_obstacle_avoidance()
+                print("⚠️  Obstacle detected - Using Arduino obstacle avoidance mode")
+            # Return stop command - Arduino will handle avoidance automatically
+            # Make sure to send the command to activate the mode
+            return ControlCommand(0, 0, 90)
+        
+        # No obstacles detected - disable Arduino obstacle avoidance and resume navigation
+        if self.state == NavigationState.AVOIDING:
+            self.robot.disable_obstacle_avoidance()
+            # Transition back to navigating if we have a waypoint
+            if self.current_waypoint:
+                self.state = NavigationState.NAVIGATING
+            else:
+                self.state = NavigationState.SEARCHING
+            print("✓ Path clear - Resuming normal navigation")
         
         # State machine logic
         if self.state == NavigationState.IDLE:
@@ -348,6 +363,10 @@ class NavigationController:
         self.heading_pid.reset()
         self.distance_pid.reset()
         self.search_start_time = None
+        # Disable Arduino obstacle avoidance modes
+        if self.robot:
+            self.robot.disable_obstacle_avoidance()
+            self.robot.disable_obstacle_following()
     
     def get_state(self) -> NavigationState:
         """Get current navigation state"""

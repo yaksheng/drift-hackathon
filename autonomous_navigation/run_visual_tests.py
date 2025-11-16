@@ -33,7 +33,7 @@ def main():
     
     try:
         # Use the existing simulate.py script
-        script_path = os.path.join(os.path.dirname(__file__), '..', 'simulate.py')
+        script_path = os.path.join(os.path.dirname(__file__), '..', 'scripts', 'simulate.py')
         result = subprocess.run(
             ['python3', script_path, '--stop-at-line', '1', '--max-iterations', '200'],
             cwd=os.path.dirname(os.path.dirname(__file__))

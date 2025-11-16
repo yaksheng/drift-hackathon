@@ -65,7 +65,7 @@ def main():
         "Basic Simulation Test",
         run_test(
             "Basic Simulation - Stop at Line 1",
-            ["python3", "simulate.py", "--stop-at-line", "1", "--max-iterations", "150", "--no-wait"]
+            ["python3", "scripts/simulate.py", "--stop-at-line", "1", "--max-iterations", "150", "--no-wait"]
         )
     ))
     
@@ -74,7 +74,7 @@ def main():
         "Different Starting Position",
         run_test(
             "Simulation - Custom Start Position",
-            ["python3", "simulate.py", "--stop-at-line", "2", 
+            ["python3", "scripts/simulate.py", "--stop-at-line", "2", 
              "--initial-x", "0.3", "--initial-y", "0.5", "--max-iterations", "150", "--no-wait"]
         )
     ))
@@ -93,7 +93,7 @@ def main():
         "Navigation to Line 3",
         run_test(
             "Simulation - Stop at Line 3",
-            ["python3", "simulate.py", "--stop-at-line", "3", "--max-iterations", "200", "--no-wait"]
+            ["python3", "scripts/simulate.py", "--stop-at-line", "3", "--max-iterations", "200", "--no-wait"]
         )
     ))
     

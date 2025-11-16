@@ -6,7 +6,7 @@ This document describes how to run visual tests to see the robot in action.
 
 Run the full navigation simulation with visualization:
 ```bash
-python3 simulate.py --stop-at-line 1 --max-iterations 200
+python3 scripts/simulate.py --stop-at-line 1 --max-iterations 200
 ```
 
 ## Test Scenarios
@@ -83,10 +83,10 @@ The main simulation script also provides visualization:
 
 ```bash
 # Basic run
-python3 simulate.py
+python3 scripts/simulate.py
 
 # With custom parameters
-python3 simulate.py --stop-at-line 1 --max-iterations 300 \
+python3 scripts/simulate.py --stop-at-line 1 --max-iterations 300 \
                     --initial-x 0.5 --initial-y 0.5
 
 # Parameters:

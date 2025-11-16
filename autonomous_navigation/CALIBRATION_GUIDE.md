@@ -190,7 +190,7 @@ These files are used automatically by the navigation system.
 
 After completing Phase 1 calibration:
 
-1. ✅ Run simulation: `python3 simulate.py --stop-at-line 1`
+1. ✅ Run simulation: `python3 scripts/simulate.py --stop-at-line 1`
 2. ✅ Test on real robot: `python3 main.py --robot-ip 192.168.1.216 --camera-url http://192.168.0.21:8000/`
 3. ✅ Monitor navigation and adjust parameters as needed
 

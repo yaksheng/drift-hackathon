@@ -8,7 +8,7 @@ import os
 import asyncio
 
 # Add autonomous_navigation to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'autonomous_navigation'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'autonomous_navigation'))
 
 from line_following_navigation import main
 

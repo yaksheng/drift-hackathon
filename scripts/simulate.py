@@ -9,7 +9,7 @@ import sys
 import os
 
 # Add autonomous_navigation to path
-autonomous_nav_path = os.path.join(os.path.dirname(__file__), 'autonomous_navigation')
+autonomous_nav_path = os.path.join(os.path.dirname(__file__), '..', 'autonomous_navigation')
 sys.path.insert(0, autonomous_nav_path)
 
 # Change to autonomous_navigation directory for relative imports

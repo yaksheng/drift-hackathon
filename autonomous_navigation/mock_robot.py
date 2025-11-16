@@ -35,6 +35,9 @@ class MockGalaxyRVR:
         self.ir_left = None
         self.ir_right = None
         
+        # Compatibility attributes
+        self._obstacle_avoidance_enabled = False
+        
         # Update sensor readings
         self._update_sensors()
     
@@ -120,4 +123,12 @@ class MockGalaxyRVR:
     def get_orientation(self):
         """Get current robot orientation"""
         return self.simulated_robot.get_orientation()
+    
+    def enable_obstacle_avoidance(self):
+        """Enable obstacle avoidance mode (compatibility method)"""
+        self._obstacle_avoidance_enabled = True
+    
+    def disable_obstacle_avoidance(self):
+        """Disable obstacle avoidance mode (compatibility method)"""
+        self._obstacle_avoidance_enabled = False
 

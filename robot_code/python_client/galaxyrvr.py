@@ -64,6 +64,12 @@ class GalaxyRVR:
         self.running = True
         self._receive_task = None
         self._is_stop_signal = False
+        
+        # Obstacle avoidance mode flags
+        self._obstacle_avoidance_enabled = False
+        self._obstacle_following_enabled = False
+        self._last_obstacle_avoidance_enabled = False
+        self._last_obstacle_following_enabled = False
 
     async def connect(self):
         """Establish WebSocket connection to robot"""
@@ -169,11 +175,13 @@ class GalaxyRVR:
             return False
 
         try:
-            # Check if values changed
+            # Check if values changed (including obstacle avoidance mode changes)
             values_changed = (
                 self.left_motor != self._last_left_motor or
                 self.right_motor != self._last_right_motor or
-                self.servo_angle != self._last_servo_angle
+                self.servo_angle != self._last_servo_angle or
+                self._obstacle_avoidance_enabled != self._last_obstacle_avoidance_enabled or
+                self._obstacle_following_enabled != self._last_obstacle_following_enabled
             )
 
             if not self._is_stop_signal:
@@ -191,8 +199,30 @@ class GalaxyRVR:
 
             # Set motor and servo values
             command["D"] = self.servo_angle   # Servo
-            command["K"] = self.left_motor    # Left motor
-            command["Q"] = self.right_motor   # Right motor
+            
+            # Control obstacle avoidance modes via REGION_E and REGION_F
+            # REGION_E: Obstacle avoidance mode (MODE_OBSTACLE_AVOIDANCE)
+            # REGION_F: Obstacle following mode (MODE_OBSTACLE_FOLLOWING)
+            # Arduino checks getSwitch(REGION_E) which reads boolean from JSON
+            if self._obstacle_avoidance_enabled:
+                command["E"] = 1  # Enable obstacle avoidance mode (1 = True/ON)
+                command["F"] = 0  # Disable obstacle following (0 = False/OFF)
+                # Don't send motor commands when in obstacle avoidance mode
+                # Arduino will control motors automatically via obstacleAvoidance()
+                command["K"] = None
+                command["Q"] = None
+            elif self._obstacle_following_enabled:
+                command["E"] = 0  # Disable obstacle avoidance
+                command["F"] = 1  # Enable obstacle following mode (1 = True/ON)
+                # Don't send motor commands when in obstacle following mode
+                command["K"] = None
+                command["Q"] = None
+            else:
+                # Normal manual control mode
+                command["E"] = 0  # Disable obstacle avoidance (0 = False/OFF)
+                command["F"] = 0  # Disable obstacle following (0 = False/OFF)
+                command["K"] = self.left_motor    # Left motor
+                command["Q"] = self.right_motor   # Right motor
 
             # Send as JSON
             message = json.dumps(command)
@@ -202,6 +232,8 @@ class GalaxyRVR:
             self._last_left_motor = self.left_motor
             self._last_right_motor = self.right_motor
             self._last_servo_angle = self.servo_angle
+            self._last_obstacle_avoidance_enabled = self._obstacle_avoidance_enabled
+            self._last_obstacle_following_enabled = self._obstacle_following_enabled
             self._is_stop_signal = False
 
             return True
@@ -238,6 +270,38 @@ class GalaxyRVR:
         self._is_stop_signal = True
         self.left_motor = 0
         self.right_motor = 0
+    
+    def enable_obstacle_avoidance(self):
+        """
+        Enable Arduino's built-in obstacle avoidance mode
+        
+        This activates MODE_OBSTACLE_AVOIDANCE on the Arduino,
+        which uses the obstacleAvoidance() function.
+        """
+        self._obstacle_avoidance_enabled = True
+    
+    def disable_obstacle_avoidance(self):
+        """
+        Disable Arduino's built-in obstacle avoidance mode
+        
+        Returns control to MODE_APP_CONTROL for manual motor control.
+        """
+        self._obstacle_avoidance_enabled = False
+    
+    def enable_obstacle_following(self):
+        """
+        Enable Arduino's built-in obstacle following mode
+        
+        This activates MODE_OBSTACLE_FOLLOWING on the Arduino,
+        which uses the obstacleFollowing() function.
+        """
+        self._obstacle_following_enabled = True
+    
+    def disable_obstacle_following(self):
+        """
+        Disable Arduino's built-in obstacle following mode
+        """
+        self._obstacle_following_enabled = False
 
     def forward(self, speed=60):
         """

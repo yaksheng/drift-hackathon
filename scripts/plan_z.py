@@ -1,5 +1,5 @@
 """
-GalaxyRVR Move Forward for 9 Seconds
+GalaxyRVR Move Forward for 12 Seconds
 
 This script uses the GalaxyRVR library to make the robot
 move forward for a fixed duration.
@@ -10,7 +10,7 @@ import sys
 import os
 
 # Add robot_code/python_client to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'robot_code', 'python_client'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'robot_code', 'python_client'))
 from galaxyrvr import GalaxyRVR
 # We don't need the KeyboardController for this script
 # from galaxyrvr_keyboard import KeyboardController
@@ -26,7 +26,7 @@ async def main():
     port = 8765
 
     print("=" * 60)
-    print("GalaxyRVR - Move Forward for 9 Seconds")
+    print("GalaxyRVR - Move Forward for 12 Seconds")
     print("=" * 60)
 
     # Create and connect to robot
@@ -54,11 +54,11 @@ async def main():
         await robot.send()
         print("Command sent!")
 
-        print("Waiting for 9 seconds...")
+        print("Waiting for 12 seconds...")
         # Send commands continuously to keep the robot moving
         # The robot may need periodic updates to maintain movement
         start_time = asyncio.get_event_loop().time()
-        while (asyncio.get_event_loop().time() - start_time) < 9.0:
+        while (asyncio.get_event_loop().time() - start_time) < 12.0:
             # Force send by resetting tracking variables
             robot._last_left_motor = None
             robot._last_right_motor = None

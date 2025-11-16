@@ -434,11 +434,17 @@ class AutonomousNavigation:
                             command.right_motor = recovery_cmd[1]
                     
                     # Apply command to robot
-                    self.robot.set_motors(command.left_motor, command.right_motor)
+                    # Note: If in obstacle avoidance mode, motor commands are ignored
+                    # and Arduino handles control automatically
+                    if not self.robot._obstacle_avoidance_enabled and not self.robot._obstacle_following_enabled:
+                        self.robot.set_motors(command.left_motor, command.right_motor)
                     self.robot.set_servo(command.servo_angle)
                     # Force send by resetting tracking variables to ensure command is sent
+                    # This ensures mode changes are sent even if motor values haven't changed
                     self.robot._last_left_motor = None
                     self.robot._last_right_motor = None
+                    self.robot._last_obstacle_avoidance_enabled = not self.robot._obstacle_avoidance_enabled
+                    self.robot._last_obstacle_following_enabled = not self.robot._obstacle_following_enabled
                     await self.robot.send()
                 
                 # Update path visualization

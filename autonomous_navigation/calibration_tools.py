@@ -527,7 +527,7 @@ def main():
         print("=" * 60)
         print("\nNext steps:")
         print("  1. Run sensor validation: python3 calibration_tools.py validate-sensors")
-        print("  2. Test navigation: python3 simulate.py --stop-at-line 1")
+        print("  2. Test navigation: python3 scripts/simulate.py --stop-at-line 1")
 
 
 if __name__ == "__main__":
