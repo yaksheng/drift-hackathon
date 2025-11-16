@@ -28,6 +28,8 @@ from robot_localization import RobotLocalizer, RobotPose
 from path_planner import PathPlanner, Waypoint
 from navigation_controller import NavigationController, NavigationState
 from line_detection import LineDetector, DetectedLine
+from dead_reckoning import DeadReckoning
+from path_visualization import PathVisualizer
 
 
 class AutonomousNavigation:
@@ -65,6 +67,8 @@ class AutonomousNavigation:
         self.robot_localizer = RobotLocalizer(robot_marker_color=robot_marker_color)
         self.path_planner = PathPlanner()
         self.navigation_controller: Optional[NavigationController] = None
+        self.dead_reckoning = DeadReckoning()  # For handling camera delay
+        self.path_visualizer: Optional[PathVisualizer] = None  # For path overlay
         
         # State
         self.running = False
@@ -73,9 +77,14 @@ class AutonomousNavigation:
         self.goal_line: Optional[DetectedLine] = None  # The blue line goal at top
         self.current_pose: Optional[RobotPose] = None
         self.world_transform: Optional[np.ndarray] = None
+        self.last_camera_update: float = 0  # Track camera update time
         
         # Overhead camera frame
         self.overhead_frame: Optional[np.ndarray] = None
+        
+        # Path visualization settings
+        self.save_path_images: bool = False  # Set to True to save images
+        self.display_path_images: bool = False  # Set to True to display images
         
     async def initialize(self):
         """Initialize robot and camera connections"""
@@ -106,14 +115,19 @@ class AutonomousNavigation:
             print(f"\nLoading world transform from {transform_file}...")
             self.world_transform = np.load(transform_file)
             self.robot_localizer.set_world_transform(self.world_transform)
+            # Initialize path visualizer with transform
+            self.path_visualizer = PathVisualizer(world_transform=self.world_transform)
             print("✅ World transform loaded")
         else:
             print(f"\n⚠️  World transform file not found: {transform_file}")
             print("   Using pixel coordinates (no world transform)")
+            self.path_visualizer = PathVisualizer(world_transform=None)
         
         print("\n" + "=" * 60)
         print("Initialization Complete!")
         print("=" * 60)
+        print("📡 Dead reckoning enabled to handle camera delay")
+        print("📊 Path visualization enabled")
         return True
     
     async def shutdown(self):
@@ -202,12 +216,20 @@ class AutonomousNavigation:
                 dt = current_time - last_update
                 last_update = current_time
                 
+                # Check if camera update is delayed
+                time_since_camera = current_time - self.last_camera_update
+                camera_delayed = time_since_camera > 2.0  # More than 2 seconds
+                
+                goal_line = None
+                targets = []
+                
                 # Get overhead frame if available
                 if self.use_overhead_camera and self.overhead_frame is not None:
                     frame = self.overhead_frame.copy()
                     
                     # Detect blue goal line at top (main objective)
                     goal_line = self.detect_goal_line(frame)
+                    self.goal_line = goal_line
                     
                     # Detect targets (for intermediate waypoints)
                     targets = self.detect_targets(frame)
@@ -215,63 +237,98 @@ class AutonomousNavigation:
                     
                     # Localize robot
                     pose = self.localize_robot(frame)
-                    self.current_pose = pose
                     
-                    # Determine goal position
-                    goal_pos = None
-                    
-                    if goal_line and pose:
-                        # Use the center of the blue line as goal
-                        goal_pos = goal_line.world_center
-                        print(f"🎯 Goal line detected at: ({goal_pos[0]:.2f}, {goal_pos[1]:.2f})")
-                        
-                        # Check if reached goal line
-                        distance_to_line = self.distance((pose.x, pose.y), goal_pos)
-                        if distance_to_line < 0.15:  # Within 15cm
-                            self.navigation_controller.state = NavigationState.ARRIVED
-                            self.robot.stop()
-                            await self.robot.send()
-                            print(f"\n🎯 SUCCESS: Reached blue line at top! (distance: {distance_to_line:.2f}m)")
-                            print("✅ Challenge complete: Navigated to middle blue line while avoiding obstacles!")
-                            break
-                    
-                    # If no goal line detected, use closest target as fallback
-                    if goal_pos is None and targets and pose:
-                        closest_target = min(targets, 
-                                            key=lambda t: self.distance(
-                                                (pose.x, pose.y), 
-                                                t.world_pos
-                                            ))
-                        goal_pos = closest_target.world_pos
-                        print(f"⚠️  Goal line not detected, using target: ({goal_pos[0]:.2f}, {goal_pos[1]:.2f})")
-                    
-                    # Update obstacles dynamically from sensor data
-                    if pose and self.robot:
-                        self.path_planner.update_obstacle_from_sensors(
-                            (pose.x, pose.y),
-                            pose.theta,
-                            self.robot.ultrasonic_distance,
-                            self.robot.ir_left,
-                            self.robot.ir_right
-                        )
-                    
-                    # Set goal and plan path
-                    if goal_pos and pose:
-                        # Set target in navigation controller
-                        self.navigation_controller.set_target(goal_pos)
-                        
-                        # Plan path (obstacles are detected dynamically from sensors)
-                        self.path_planner.replan_path(
-                            (pose.x, pose.y),
-                            goal_pos
-                        )
-                        
-                        # Get next waypoint
-                        waypoint = self.path_planner.get_next_waypoint()
-                        if waypoint:
-                            self.navigation_controller.set_waypoint(
-                                (waypoint.x, waypoint.y)
+                    # Update dead reckoning with camera measurement (ground truth)
+                    if pose:
+                        # Initialize dead reckoning if not already initialized
+                        if self.dead_reckoning.odometry is None:
+                            self.dead_reckoning.initialize(
+                                (pose.x, pose.y),
+                                pose.theta
                             )
+                        else:
+                            self.dead_reckoning.update_from_camera(
+                                (pose.x, pose.y),
+                                pose.theta
+                            )
+                        self.last_camera_update = current_time
+                        self.current_pose = pose
+                    elif camera_delayed:
+                        # Use dead reckoning estimate if camera is delayed
+                        dr_pose = self.dead_reckoning.get_estimated_pose()
+                        if dr_pose:
+                            self.current_pose = RobotPose(
+                                x=dr_pose[0],
+                                y=dr_pose[1],
+                                theta=dr_pose[2]
+                            )
+                            print(f"\r⚠️  Using dead reckoning (camera delay: {time_since_camera:.1f}s)", end='', flush=True)
+                elif camera_delayed:
+                    # No camera frame available, use dead reckoning
+                    dr_pose = self.dead_reckoning.get_estimated_pose()
+                    if dr_pose:
+                        self.current_pose = RobotPose(
+                            x=dr_pose[0],
+                            y=dr_pose[1],
+                            theta=dr_pose[2]
+                        )
+                        print(f"\r⚠️  Using dead reckoning (no camera: {time_since_camera:.1f}s)", end='', flush=True)
+                
+                # Determine goal position (works with both camera and dead reckoning)
+                goal_pos = None
+                
+                if goal_line and self.current_pose:
+                    # Use the center of the blue line as goal
+                    goal_pos = goal_line.world_center
+                    print(f"🎯 Goal line detected at: ({goal_pos[0]:.2f}, {goal_pos[1]:.2f})")
+                    
+                    # Check if reached goal line
+                    distance_to_line = self.distance((self.current_pose.x, self.current_pose.y), goal_pos)
+                    if distance_to_line < 0.15:  # Within 15cm
+                        self.navigation_controller.state = NavigationState.ARRIVED
+                        self.robot.stop()
+                        await self.robot.send()
+                        print(f"\n🎯 SUCCESS: Reached blue line at top! (distance: {distance_to_line:.2f}m)")
+                        print("✅ Challenge complete: Navigated to middle blue line while avoiding obstacles!")
+                        break
+                
+                # If no goal line detected, use closest target as fallback
+                if goal_pos is None and targets and self.current_pose:
+                    closest_target = min(targets, 
+                                        key=lambda t: self.distance(
+                                            (self.current_pose.x, self.current_pose.y), 
+                                            t.world_pos
+                                        ))
+                    goal_pos = closest_target.world_pos
+                    print(f"⚠️  Goal line not detected, using target: ({goal_pos[0]:.2f}, {goal_pos[1]:.2f})")
+                
+                # Update obstacles dynamically from sensor data
+                if self.current_pose and self.robot:
+                    self.path_planner.update_obstacle_from_sensors(
+                        (self.current_pose.x, self.current_pose.y),
+                        self.current_pose.theta,
+                        self.robot.ultrasonic_distance,
+                        self.robot.ir_left,
+                        self.robot.ir_right
+                    )
+                
+                # Set goal and plan path
+                if goal_pos and self.current_pose:
+                    # Set target in navigation controller
+                    self.navigation_controller.set_target(goal_pos)
+                    
+                    # Plan path (obstacles are detected dynamically from sensors)
+                    self.path_planner.replan_path(
+                        (self.current_pose.x, self.current_pose.y),
+                        goal_pos
+                    )
+                    
+                    # Get next waypoint
+                    waypoint = self.path_planner.get_next_waypoint()
+                    if waypoint:
+                        self.navigation_controller.set_waypoint(
+                            (waypoint.x, waypoint.y)
+                        )
                 
                 # Update navigation controller
                 if self.navigation_controller and self.current_pose:
@@ -281,17 +338,64 @@ class AutonomousNavigation:
                         dt
                     )
                     
+                    # Update dead reckoning with motor commands
+                    self.dead_reckoning.update_from_motors(
+                        command.left_motor,
+                        command.right_motor
+                    )
+                    
                     # Apply command to robot
                     self.robot.set_motors(command.left_motor, command.right_motor)
                     self.robot.set_servo(command.servo_angle)
                     await self.robot.send()
                 
+                # Update path visualization
+                if self.path_visualizer and self.current_pose:
+                    # Add current position to path history
+                    self.path_visualizer.add_path_point((self.current_pose.x, self.current_pose.y))
+                    
+                    # Get planned waypoints
+                    waypoints = []
+                    if self.path_planner.current_path:
+                        waypoints = [(wp.x, wp.y) for wp in self.path_planner.current_path if not wp.reached]
+                    
+                    # Get goal position
+                    goal_pos = None
+                    if self.goal_line:
+                        goal_pos = self.goal_line.world_center
+                    elif self.current_targets:
+                        closest = min(self.current_targets,
+                                    key=lambda t: self.distance((self.current_pose.x, self.current_pose.y),
+                                                               t.world_pos))
+                        goal_pos = closest.world_pos
+                    
+                    # Overlay path on frame if available
+                    if self.use_overhead_camera and self.overhead_frame is not None:
+                        vis_frame = self.path_visualizer.overlay_path(
+                            self.overhead_frame.copy(),
+                            robot_pos=(self.current_pose.x, self.current_pose.y),
+                            goal_pos=goal_pos,
+                            waypoints=waypoints
+                        )
+                        
+                        # Save or display image if enabled
+                        if self.save_path_images:
+                            os.makedirs('path_images', exist_ok=True)
+                            filename = f"path_images/path_{int(current_time * 1000)}.jpg"
+                            cv2.imwrite(filename, vis_frame)
+                        
+                        if self.display_path_images:
+                            cv2.imshow('Navigation Path', vis_frame)
+                            cv2.waitKey(1)
+                
                 # Print status
                 if self.current_pose:
                     state = self.navigation_controller.get_state() if self.navigation_controller else "UNKNOWN"
+                    dr_confidence = self.dead_reckoning.get_confidence()
                     print(f"\rState: {state.value:12s} | "
                           f"Pos: ({self.current_pose.x:.2f}, {self.current_pose.y:.2f}) | "
-                          f"Targets: {len(self.current_targets)}", end='', flush=True)
+                          f"Targets: {len(self.current_targets)} | "
+                          f"DR: {dr_confidence:.2f}", end='', flush=True)
                 
                 # Small delay
                 await asyncio.sleep(0.1)
@@ -383,6 +487,10 @@ async def main():
                        help='Color of robot marker')
     parser.add_argument('--no-overhead', action='store_true',
                        help='Disable overhead camera (use onboard only)')
+    parser.add_argument('--save-path-images', action='store_true',
+                       help='Save path visualization images to path_images/ directory')
+    parser.add_argument('--display-path-images', action='store_true',
+                       help='Display path visualization in real-time window')
     
     args = parser.parse_args()
     
@@ -394,6 +502,10 @@ async def main():
         robot_marker_color=args.robot_marker_color,
         use_overhead_camera=not args.no_overhead
     )
+    
+    # Enable path visualization if requested
+    nav.save_path_images = args.save_path_images
+    nav.display_path_images = args.display_path_images
     
     # Initialize
     if not await nav.initialize():

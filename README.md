@@ -38,6 +38,9 @@ drift-hackathon/
     ├── robot_localization.py # Position tracking
     ├── path_planner.py       # Path planning
     ├── navigation_controller.py # Control system
+    ├── dead_reckoning.py     # Odometry for camera delay handling
+    ├── path_visualization.py # Path overlay on camera feed
+    ├── line_detection.py     # Line detection module
     ├── main.py              # Main entry point
     ├── example_usage.py     # Usage examples
     └── requirements.txt     # Dependencies
@@ -611,28 +614,108 @@ python3 autonomous_navigation/capture_calibration_image.py --camera 0
 python main.py --robot-ip 192.168.1.216 \
                --camera-url http://192.168.1.109:5000/ \
                --target-color blue \
-               --robot-marker-color green
+               --robot-marker-color green \
+               --save-path-images \
+               --display-path-images
 ```
+
+**New Features**:
+- **Dead Reckoning**: Handles webcam delay by estimating robot position using motor commands and odometry
+- **Path Visualization**: Overlays robot path, waypoints, and goal on camera feed images
+  - Use `--save-path-images` to save visualization images to `path_images/` directory
+  - Use `--display-path-images` to show real-time visualization window
+
+---
+
+## 📡 Dead Reckoning & Camera Delay Handling
+
+### Problem
+The overhead webcam feed experiences significant delays (10+ seconds), which causes the robot to:
+- Stop and wait for camera updates
+- Make decisions based on stale position data
+- Miss waypoints or overshoot targets
+
+### Solution: Dead Reckoning / Odometry
+
+Instead of waiting for camera updates, the system uses **dead reckoning** to continuously estimate the robot's position:
+
+1. **Initialization**: When camera provides first position, dead reckoning is initialized
+2. **Continuous Updates**: Motor commands are used to estimate position using differential drive kinematics
+3. **Camera Correction**: When camera updates arrive, dead reckoning is corrected with ground truth
+4. **Seamless Navigation**: Robot continues moving even during camera delays
+
+**Implementation** (`dead_reckoning.py`):
+- Uses differential drive kinematics model
+- Tracks wheel speeds from motor commands
+- Estimates position and orientation continuously
+- Confidence decreases over time without camera updates
+- Automatically corrects when camera data arrives
+
+**Benefits**:
+- ✅ Robot never stops waiting for camera
+- ✅ Smooth, continuous navigation
+- ✅ Handles delays up to 20+ seconds
+- ✅ Automatic correction when camera updates
+
+---
+
+## 📊 Path Visualization
+
+The system can overlay navigation information directly on the camera feed:
+
+**Visualization Elements**:
+- **Green Line**: Robot's actual path/trajectory
+- **Blue Circle**: Current robot position
+- **Orange Circles**: Planned waypoints (W1, W2, ...)
+- **Red Line**: Path to next waypoint
+- **Yellow Circle**: Goal position (blue line at top)
+
+**Usage**:
+```bash
+# Save path images to disk
+python main.py --save-path-images ...
+
+# Display real-time visualization window
+python main.py --display-path-images ...
+
+# Both
+python main.py --save-path-images --display-path-images ...
+```
+
+**Implementation** (`path_visualization.py`):
+- Converts world coordinates to pixel coordinates using transform matrix
+- Draws path history, waypoints, and goal on camera frames
+- Maintains last 100 path points for visualization
+- Can save images or display in real-time window
 
 ---
 
 ## 🔄 Module Integration
 
-The five modules work together in a coordinated pipeline:
+The modules work together in a coordinated pipeline:
 
 1. **Overhead Camera** → Provides global view of arena
 2. **Target Detection** → Identifies targets and converts to world coordinates
 3. **Robot Localization** → Tracks robot position in world coordinates
-4. **Path Planner** → Generates waypoints from robot to target (avoiding obstacles)
-5. **Navigation Controller** → Converts waypoints to motor commands using PID control
-6. **Robot** → Executes commands and provides sensor feedback
-7. **Loop** → Repeats at ~10Hz for real-time navigation
+4. **Dead Reckoning** → Estimates position during camera delays using odometry
+5. **Path Planner** → Generates waypoints from robot to target (avoiding obstacles)
+6. **Navigation Controller** → Converts waypoints to motor commands using PID control
+7. **Path Visualization** → Overlays path and navigation info on camera feed
+8. **Robot** → Executes commands and provides sensor feedback
+9. **Loop** → Repeats at ~10Hz for real-time navigation
 
 **Data Flow**:
 ```
-Camera Frame → [Target Detection + Localization] → [Path Planning] → 
-[Navigation Controller] → Motor Commands → Robot → Sensor Feedback → Loop
+Camera Frame → [Target Detection + Localization] → [Dead Reckoning] → 
+[Path Planning] → [Navigation Controller] → Motor Commands → Robot → 
+[Dead Reckoning Update] → Sensor Feedback → [Path Visualization] → Loop
 ```
+
+**Dead Reckoning Integration**:
+- Camera updates provide ground truth position (when available)
+- Motor commands continuously update dead reckoning estimate
+- Navigation uses dead reckoning position when camera is delayed (>2s)
+- Automatic correction when camera updates arrive
 
 ---
 
