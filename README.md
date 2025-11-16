@@ -811,24 +811,37 @@ python main.py --robot-ip 192.168.1.216 --no-overhead
 ```
 
 #### Simulation (Recommended for Testing) ✅
-```bash
-cd autonomous_navigation
 
-# Stop at first line (default)
-python simulate_navigation.py --stop-at-line 1
+**First, install dependencies:**
+```bash
+pip3 install -r autonomous_navigation/requirements.txt
+```
+
+**Then run simulation:**
+```bash
+# From project root (easiest)
+python3 simulate.py --stop-at-line 1
+
+# Or from autonomous_navigation directory
+cd autonomous_navigation
+python3 simulate_navigation.py --stop-at-line 1
 
 # Stop at second line
-python simulate_navigation.py --stop-at-line 2
+python3 simulate.py --stop-at-line 2
 
 # Stop at third line
-python simulate_navigation.py --stop-at-line 3
+python3 simulate.py --stop-at-line 3
 
 # Custom starting position
-python simulate_navigation.py --stop-at-line 2 \
+python3 simulate.py --stop-at-line 2 \
     --initial-x 0.3 --initial-y 0.5 --initial-theta 0.0
 ```
 
-**Note**: Simulation allows testing without physical hardware. See `SIMULATION_README.md` for details.
+**Note**: 
+- Use `python3` (not `python`) on macOS
+- Install dependencies first: `pip3 install -r autonomous_navigation/requirements.txt`
+- Simulation allows testing without physical hardware
+- See `autonomous_navigation/SIMULATION_README.md` for details
 
 ## 📊 Performance Metrics
 

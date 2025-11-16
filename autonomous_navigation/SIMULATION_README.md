@@ -22,30 +22,47 @@ pip install -r requirements.txt
 
 ### Basic Usage
 
+**From project root (recommended):**
 ```bash
 # Stop at first line (default)
-python simulate_navigation.py --stop-at-line 1
+python3 simulate.py --stop-at-line 1
 
 # Stop at second line
-python simulate_navigation.py --stop-at-line 2
+python3 simulate.py --stop-at-line 2
 
 # Stop at third line
-python simulate_navigation.py --stop-at-line 3
+python3 simulate.py --stop-at-line 3
+```
+
+**From autonomous_navigation directory:**
+```bash
+cd autonomous_navigation
+
+# Stop at first line (default)
+python3 simulate_navigation.py --stop-at-line 1
+
+# Stop at second line
+python3 simulate_navigation.py --stop-at-line 2
+
+# Stop at third line
+python3 simulate_navigation.py --stop-at-line 3
 ```
 
 ### Advanced Options
 
 ```bash
-# Custom starting position
-python simulate_navigation.py \
+# Custom starting position (from project root)
+python3 simulate.py \
     --stop-at-line 2 \
     --initial-x 0.3 \
     --initial-y 0.5 \
     --initial-theta 0.0
 
 # Limit iterations
-python simulate_navigation.py --stop-at-line 1 --max-iterations 500
+python3 simulate.py --stop-at-line 1 --max-iterations 500
 ```
+
+**Note**: On macOS, use `python3` instead of `python`.
 
 ## Command Line Arguments
 
