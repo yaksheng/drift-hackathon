@@ -302,6 +302,106 @@ drift-hackathon/
     └── requirements.txt              # Dependencies
 ```
 
+## 🔧 Phase 1: Calibration Tools Implementation
+
+### Calibration Tools (`calibration_tools.py`) ✅
+
+**Purpose**: Comprehensive tools for arena setup, calibration, and system validation.
+
+**Implementation Details**:
+
+- **ArenaCalibrator Class**: Main calibration tool with methods for:
+  - `verify_red_corners()`: Detects and verifies 4 red corner markers
+    - Uses HSV color detection (same as `arena_transform.py`)
+    - Validates exactly 4 corners are detected
+    - Creates visualization images showing detected corners
+    - Provides troubleshooting guidance if detection fails
+  
+  - `calibrate_world_coordinates()`: Calibrates world coordinate system
+    - Takes pixel coordinates (from corner detection) and world coordinates (measured)
+    - Calculates two transformation matrices:
+      * `auto_transform_matrix.npy`: Pixel to normalized coordinates
+      * `world_transform_matrix.npy`: Pixel to world coordinates (meters)
+    - Uses `cv2.getPerspectiveTransform()` and `cv2.findHomography()`
+    - Saves matrices for use by navigation system
+    - Tests transformation with center point
+  
+  - `test_perspective_transform()`: Tests transformation accuracy
+    - Loads saved transformation matrix
+    - Applies transformation to test image
+    - Analyzes corner angles (should be ~90° for rectangle)
+    - Calculates angle error: `|average_angle - 90°|`
+    - Provides quality assessment (Excellent/Good/Poor)
+
+- **RobotValidator Class**: Robot connection and sensor validation
+  - `validate_connection()`: Tests WebSocket connection
+    - Connects to robot via `GalaxyRVR` class
+    - Tests communication by sending stop command
+    - Provides troubleshooting for connection failures
+  
+  - `validate_sensors()`: Tests all robot sensors
+    - Reads sensors for specified duration (default 5 seconds)
+    - Validates:
+      * Battery voltage (should be >6V)
+      * Ultrasonic sensor (distance readings in cm)
+      * IR left sensor (0 or 1)
+      * IR right sensor (0 or 1)
+    - Displays statistics and ranges
+    - Provides real-time feedback during test
+
+- **Command-Line Interface**: Supports 6 commands:
+  1. `verify-corners`: Verify red corner detection
+  2. `calibrate-world`: Calibrate world coordinates
+  3. `test-transform`: Test transformation accuracy
+  4. `validate-robot`: Validate robot connection
+  5. `validate-sensors`: Validate robot sensors
+  6. `full-calibration`: Run all steps automatically
+
+**Usage Examples**:
+```bash
+# Verify corners
+python3 calibrate.py verify-corners --image arena_image.png
+
+# Calibrate with custom coordinates
+python3 calibrate.py calibrate-world --image arena_image.png \
+    --world-corners "0,3.85 2.35,3.95 1.7,0.05 0.45,0"
+
+# Full calibration
+python3 calibrate.py full-calibration --image arena_image.png
+```
+
+---
+
+### Image Capture Tool (`capture_calibration_image.py`) ✅
+
+**Purpose**: Capture images from overhead camera for calibration.
+
+**Implementation Details**:
+
+- **URL Capture**: Captures from MJPEG stream
+  - Connects to camera stream URL (e.g., `http://192.168.0.21:8000/`)
+  - Parses MJPEG stream (finds JPEG boundaries: `\xff\xd8` to `\xff\xd9`)
+  - Decodes first complete frame
+  - Saves with timestamped filename
+
+- **Webcam Capture**: Captures from local webcam
+  - Uses `cv2.VideoCapture()` with camera index
+  - Captures single frame
+  - Saves with timestamped filename
+
+- **Automatic Filenames**: Uses timestamp format: `calibration_image_YYYYMMDD_HHMMSS.png`
+
+**Usage**:
+```bash
+# From camera URL
+python3 autonomous_navigation/capture_calibration_image.py --url http://192.168.0.21:8000/
+
+# From local webcam
+python3 autonomous_navigation/capture_calibration_image.py --camera 0
+```
+
+---
+
 ## 🔧 Key Modules Implementation
 
 ### 1. Target Detection (`target_detection.py`) ✅
