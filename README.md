@@ -57,10 +57,16 @@ Based on the codebase analysis, the challenge likely involves:
 ### Phase 1: System Integration & Calibration ✅
 
 - [x] Repository setup and initial code commit
-- [ ] Arena setup and red corner marker verification
-- [ ] World coordinate system calibration
-- [ ] Perspective transformation accuracy testing
-- [ ] Robot connection and sensor validation
+- [x] Arena setup and red corner marker verification
+- [x] World coordinate system calibration
+- [x] Perspective transformation accuracy testing
+- [x] Robot connection and sensor validation
+
+**Calibration Tools Implemented:**
+- `calibration_tools.py`: Comprehensive calibration and validation tools
+- `capture_calibration_image.py`: Capture images from camera for calibration
+- `calibrate.py`: Convenience wrapper script
+- See `CALIBRATION_GUIDE.md` for detailed instructions
 
 ### Phase 2: Core Navigation System ✅
 
@@ -218,17 +224,42 @@ pip install scipy matplotlib
    - Position overhead webcam above arena
    - Ensure good lighting conditions
 
-2. **Calibration**
+2. **Calibration** (Phase 1 - Required Before Navigation)
+   
+   **Quick Calibration:**
    ```bash
-   # Run arena transformation calibration
-   cd webcam_code
-   python arena_transform.py
+   # Capture calibration image
+   python3 autonomous_navigation/capture_calibration_image.py --url http://192.168.0.21:8000/
+   
+   # Run full calibration
+   python3 calibrate.py full-calibration --image calibration_image_*.png
    ```
+   
+   **Step-by-Step:**
+   ```bash
+   # 1. Verify red corners
+   python3 calibrate.py verify-corners --image calibration_image.png
+   
+   # 2. Calibrate world coordinates
+   python3 calibrate.py calibrate-world --image calibration_image.png
+   
+   # 3. Test transformation
+   python3 calibrate.py test-transform --image calibration_image.png
+   
+   # 4. Validate robot
+   python3 calibrate.py validate-robot --robot-ip 192.168.1.216
+   
+   # 5. Validate sensors
+   python3 calibrate.py validate-sensors --robot-ip 192.168.1.216
+   ```
+   
+   See `autonomous_navigation/CALIBRATION_GUIDE.md` for detailed instructions.
 
 3. **Start Camera Stream**
    ```bash
    # Start webcam server with transformation
-   python webcam_stream.py --transform --camera 0
+   cd webcam_code
+   python3 webcam_stream.py --transform --camera 0
    ```
 
 ## 📁 Project Structure
@@ -256,13 +287,18 @@ drift-hackathon/
     ├── robot_localization.py         # Position tracking
     ├── path_planner.py               # Path planning
     ├── navigation_controller.py      # Control system
+    ├── line_detection.py             # Blue line detection ✅
     ├── main.py                       # Main entry point (real robot)
     ├── example_usage.py              # Usage examples
     ├── simulator.py                  # Robot physics simulator ✅
     ├── simulator_visualization.py    # Arena visualization ✅
     ├── mock_robot.py                 # Mock robot interface ✅
     ├── simulate_navigation.py        # Simulation main script ✅
+    ├── calibration_tools.py          # Calibration and validation tools ✅
+    ├── capture_calibration_image.py # Capture calibration images ✅
+    ├── calibrate.py                  # Calibration wrapper script ✅
     ├── SIMULATION_README.md          # Simulation documentation ✅
+    ├── CALIBRATION_GUIDE.md          # Calibration guide ✅
     └── requirements.txt              # Dependencies
 ```
 
