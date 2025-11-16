@@ -145,7 +145,7 @@ class ArenaVisualizer:
     
     def draw_targets(self, targets: List[Tuple[float, float, str]]):
         """
-        Draw targets
+        Draw targets with emphasis on main goal
         
         Args:
             targets: List of (x, y, color) target positions
@@ -158,39 +158,63 @@ class ArenaVisualizer:
             if self.targets_scatter:
                 self.targets_scatter.remove()
             
+            # Draw main goal larger and more prominent
+            sizes = [300 if c == 'green' else 150 for c in colors]
+            
             self.targets_scatter = self.ax.scatter(
                 x_coords, y_coords,
                 c=colors,
-                s=200,
+                s=sizes,
                 marker='o',
                 edgecolors='black',
-                linewidths=2,
-                alpha=0.7,
-                label='Targets'
+                linewidths=3 if 'green' in colors else 2,
+                alpha=0.8,
+                label='Targets',
+                zorder=3
             )
+            
+            # Add labels for main goal
+            for i, (x, y, color) in enumerate(targets):
+                if color == 'green':
+                    self.ax.annotate('GOAL', (x, y), 
+                                   xytext=(10, 10), textcoords='offset points',
+                                   fontsize=12, fontweight='bold',
+                                   bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7))
+            
             self.ax.legend()
     
     def draw_path(self, path: List[Tuple[float, float]]):
         """
-        Draw planned path
+        Draw planned path and robot trajectory
         
         Args:
-            path: List of (x, y) waypoints
+            path: List of (x, y) waypoints (robot trajectory history)
         """
-        if path:
+        if path and len(path) > 1:
             if self.path_line:
                 self.path_line.remove()
             
             x_coords = [p[0] for p in path]
             y_coords = [p[1] for p in path]
             
+            # Draw trajectory in bright green, thicker line
             self.path_line = self.ax.plot(
                 x_coords, y_coords,
-                'g--',
-                linewidth=2,
-                alpha=0.5,
-                label='Planned Path'
+                'g-',
+                linewidth=3,
+                alpha=0.8,
+                label='Robot Path',
+                zorder=1
             )[0]
+            
+            # Mark path points
+            self.ax.scatter(
+                x_coords, y_coords,
+                c='green',
+                s=20,
+                alpha=0.6,
+                zorder=2
+            )
             self.ax.legend()
     
     def update_status(self, text: str):

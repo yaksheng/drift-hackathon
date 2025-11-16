@@ -30,24 +30,27 @@ class SimulatedNavigation:
     """Autonomous navigation in simulated environment"""
     
     def __init__(self,
-                 stop_at_line: int = 1,  # 1, 2, or 3
+                 stop_at_line: int = 1,  # 1, 2, or 3 (milestone, but goal is to reach top)
                  initial_pos: Tuple[float, float] = (0.5, 0.5),
                  initial_theta: float = 0.0,
                  target_positions: Optional[List[Tuple[float, float]]] = None,
                  obstacles: Optional[List[Tuple[float, float, float]]] = None,
-                 lines: Optional[List[Tuple[float, float, float, float]]] = None):
+                 lines: Optional[List[Tuple[float, float, float, float]]] = None,
+                 goal_y: float = 3.5):  # Goal: reach top of arena
         """
         Initialize simulated navigation
         
         Args:
-            stop_at_line: Which line to stop at (1, 2, or 3)
+            stop_at_line: Which line to track crossing (1, 2, or 3) - milestone only
             initial_pos: Starting robot position
             initial_theta: Starting robot orientation
             target_positions: List of target positions (x, y)
             obstacles: List of obstacles (x, y, radius)
             lines: List of lines (x1, y1, x2, y2)
+            goal_y: Y coordinate to reach (top of arena)
         """
         self.stop_at_line = stop_at_line
+        self.goal_y = goal_y  # Objective: reach this Y coordinate (top of frame)
         
         # Arena bounds (based on typical arena size)
         arena_bounds = ((0, 0), (2.5, 4.0))
@@ -79,14 +82,16 @@ class SimulatedNavigation:
             self.robot.add_line(0.0, 3.0, 2.5, 3.0)  # Line 3
         
         # Add default targets if none provided
+        # Main goal is at the top of the arena
         if target_positions is None:
             target_positions = [
-                (2.0, 3.5, 'blue'),
-                (1.5, 3.0, 'blue'),
-                (0.8, 2.5, 'blue'),
+                (1.25, goal_y, 'green'),  # Main goal at top center
+                (2.0, 3.2, 'blue'),       # Intermediate waypoint
+                (0.5, 2.8, 'blue'),      # Intermediate waypoint
             ]
         
         self.target_positions = target_positions
+        self.main_goal = target_positions[0]  # Primary goal at top
         
         # Create visualizer
         self.visualizer = ArenaVisualizer(arena_bounds)
@@ -117,11 +122,13 @@ class SimulatedNavigation:
         print("=" * 60)
         print("Simulated Navigation System")
         print("=" * 60)
-        print(f"\nStop at line: {self.stop_at_line}")
-        print(f"Initial position: {self.robot.get_position()}")
-        print(f"Targets: {len(self.target_positions)}")
-        print(f"Obstacles: {len(self.robot.obstacles)}")
-        print(f"Lines: {len(self.robot.lines)}")
+        print(f"\n🎯 Objective: Reach top of arena (y = {self.goal_y:.1f}m)")
+        print(f"📍 Initial position: {self.robot.get_position()}")
+        print(f"🎯 Main goal: {self.main_goal[:2]}")
+        print(f"📍 Targets: {len(self.target_positions)}")
+        print(f"🚧 Obstacles: {len(self.robot.obstacles)}")
+        print(f"📏 Lines: {len(self.robot.lines)} (milestone tracking)")
+        print(f"   - Line {self.stop_at_line} crossing will be tracked")
         print()
         
         # Connect mock robot
@@ -196,8 +203,12 @@ class SimulatedNavigation:
         print("\n" + "=" * 60)
         print("Starting Navigation Loop")
         print("=" * 60)
-        print("\nControls:")
+        print("\n🎮 Controls:")
         print("  - Close window to stop")
+        print("  - Watch the robot navigate to the top!")
+        print("  - Green circle = Main goal at top")
+        print("  - Green line = Robot's path")
+        print("  - Red circles = Obstacles to avoid")
         print()
         
         self.running = True
@@ -218,28 +229,46 @@ class SimulatedNavigation:
                 pose = self.localize_robot_simulated()
                 self.current_pose = pose
                 
-                # Check line stopping
-                if self.check_line_stopping():
+                # Check if reached top of arena (main objective)
+                if pose and pose.y >= self.goal_y - 0.1:  # Within 10cm of top
                     self.navigation_controller.state = NavigationState.ARRIVED
                     self.robot.set_motors(0, 0)
-                    print("\n✅ Challenge complete: Stopped at target line!")
+                    print(f"\n🎯 SUCCESS: Reached top of arena! (y = {pose.y:.2f})")
+                    print("✅ Challenge complete: Navigated to top while avoiding obstacles!")
                     break
                 
-                # Select closest target
+                # Check line crossing (milestone tracking)
+                line_crossed = self.check_line_stopping()
+                if line_crossed and self.stop_at_line and sum(self.line_crossed) >= self.stop_at_line:
+                    print(f"\n✓ Milestone: Crossed line {self.stop_at_line}")
+                    # Continue to top - don't stop here
+                
+                # Select target - prioritize main goal if close, otherwise closest
                 if targets and pose:
-                    closest_target = min(targets,
-                                        key=lambda t: np.sqrt(
-                                            (pose.x - t.world_pos[0])**2 +
-                                            (pose.y - t.world_pos[1])**2
-                                        ))
+                    # If close to top, go directly to main goal
+                    if pose.y > self.goal_y - 0.5:
+                        target_pos = self.main_goal[:2]  # (x, y) of main goal
+                    else:
+                        # Select closest target that's ahead (higher y)
+                        valid_targets = [t for t in targets if t.world_pos[1] > pose.y]
+                        if valid_targets:
+                            closest_target = min(valid_targets,
+                                                key=lambda t: np.sqrt(
+                                                    (pose.x - t.world_pos[0])**2 +
+                                                    (pose.y - t.world_pos[1])**2
+                                                ))
+                            target_pos = closest_target.world_pos
+                        else:
+                            # Fallback to main goal
+                            target_pos = self.main_goal[:2]
                     
                     # Set target
-                    self.navigation_controller.set_target(closest_target.world_pos)
+                    self.navigation_controller.set_target(target_pos)
                     
-                    # Plan path
+                    # Plan path to target
                     self.path_planner.replan_path(
                         (pose.x, pose.y),
-                        closest_target.world_pos
+                        target_pos
                     )
                     
                     # Get next waypoint
@@ -296,21 +325,37 @@ class SimulatedNavigation:
                       for t in self.current_targets]
         self.visualizer.draw_targets(target_list)
         
-        # Draw path
+        # Draw path (robot trajectory)
+        self.path_history.append(self.robot.get_position())
+        if len(self.path_history) > 1:
+            self.visualizer.draw_path(self.path_history)
+        
+        # Draw planned waypoints
         if self.path_planner.current_path:
-            path = [(wp.x, wp.y) for wp in self.path_planner.current_path]
-            self.path_history.append(self.robot.get_position())
-            if len(self.path_history) > 1:
-                self.visualizer.draw_path(self.path_history)
+            waypoint_path = [(wp.x, wp.y) for wp in self.path_planner.current_path if not wp.reached]
+            if waypoint_path:
+                # Draw waypoints as small squares
+                wp_x = [p[0] for p in waypoint_path]
+                wp_y = [p[1] for p in waypoint_path]
+                self.visualizer.ax.scatter(wp_x, wp_y, c='orange', s=100, marker='s', 
+                              alpha=0.6, label='Waypoints', zorder=2)
+                # Draw line to next waypoint
+                if self.current_pose and waypoint_path:
+                    self.visualizer.ax.plot([self.current_pose.x, waypoint_path[0][0]], 
+                               [self.current_pose.y, waypoint_path[0][1]],
+                               'r--', linewidth=2, alpha=0.5, label='Next waypoint')
         
         # Update status
         state_name = self.navigation_controller.get_state().value if self.navigation_controller else "UNKNOWN"
-        status = f"State: {state_name}\n"
+        status = f"🎯 Objective: Reach top (y={self.goal_y:.1f}m)\n"
+        status += f"State: {state_name}\n"
         if self.current_pose:
-            status += f"Pos: ({self.current_pose.x:.2f}, {self.current_pose.y:.2f})\n"
-            status += f"Theta: {self.current_pose.theta:.2f} rad\n"
+            status += f"Position: ({self.current_pose.x:.2f}, {self.current_pose.y:.2f})m\n"
+            status += f"Distance to top: {self.goal_y - self.current_pose.y:.2f}m\n"
+            status += f"Progress: {(self.current_pose.y / self.goal_y * 100):.1f}%\n"
         status += f"Lines crossed: {sum(self.line_crossed)}/{len(self.robot.lines)}\n"
-        status += f"Stop at line: {self.stop_at_line}"
+        if self.path_planner.current_path:
+            status += f"Waypoints: {len([w for w in self.path_planner.current_path if not w.reached])} remaining"
         
         self.visualizer.update_status(status)
         

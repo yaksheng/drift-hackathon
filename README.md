@@ -589,11 +589,14 @@ The simulation system consists of four main components that work together to cre
 
 - **Dynamic Elements** (updated each frame):
   - **Robot**: Blue circle with orientation arrow showing heading direction
-  - **Targets**: Colored scatter points (one per target)
+  - **Main Goal**: Large green circle with "GOAL" label at top of arena
+  - **Targets**: Colored scatter points (green for main goal, blue for waypoints)
   - **Obstacles**: Red circles with semi-transparent fill
-  - **Lines**: Blue lines (regular), green dashed line (target line to stop at)
-  - **Path**: Green dashed line showing planned navigation path
-  - **Status Box**: Text overlay showing current state, position, orientation, and line crossing status
+  - **Lines**: Blue lines (milestone markers)
+  - **Robot Path**: Bright green solid line showing actual trajectory with path points
+  - **Waypoints**: Orange squares showing planned waypoints
+  - **Next Waypoint Path**: Red dashed line from robot to next waypoint
+  - **Status Box**: Text overlay showing objective, state, position, progress percentage, distance to goal, and line crossing status
 
 - **Efficient Updates**: Uses object removal and recreation for dynamic elements to avoid memory leaks. Clears and redraws only changed elements each frame.
 
@@ -672,52 +675,73 @@ plt.show()
   - Sets up default arena configuration (bounds, obstacles, lines, targets)
   - Configures challenge parameters (which line to stop at)
 
-- **Line Stopping Challenge**: 
+- **Main Objective**: Reach the top of the arena (y = 3.5m) while avoiding obstacles
+  - Primary goal is a green target at the top center of the arena
+  - Robot navigates from bottom to top, avoiding obstacles
+  - Success when robot reaches within 10cm of goal Y coordinate
+  
+- **Line Crossing Tracking** (Milestone): 
   - Tracks which lines have been crossed using boolean array: `line_crossed = [False, False, False]`
   - Checks line crossings each iteration using `robot.check_line_crossing(line_index)`
-  - When target line is crossed:
-    1. Sets navigation state to `ARRIVED`
-    2. Stops robot motors
-    3. Displays success message
-    4. Exits navigation loop
+  - Lines serve as milestones but don't stop the robot - robot continues to top
+  - Displays milestone messages when lines are crossed
 
 - **Navigation Loop** (runs at ~10Hz):
   1. **Target Detection**: Uses simulated target positions (known a priori in simulation)
   2. **Robot Localization**: Uses actual simulator position (perfect localization in simulation)
-  3. **Target Selection**: Selects closest target to current position
-  4. **Path Planning**: Plans path from robot to target
-  5. **Control Update**: Updates navigation controller, gets motor commands
-  6. **Robot Control**: Sends commands to mock robot (which updates simulator)
-  7. **Line Check**: Checks if target line has been crossed
-  8. **Visualization**: Updates display with current state
+  3. **Goal Check**: Checks if robot has reached top of arena (main objective)
+  4. **Target Selection**: Prioritizes main goal when close, otherwise selects closest forward target
+  5. **Path Planning**: Plans obstacle-avoiding path from robot to target
+  6. **Control Update**: Updates navigation controller, gets motor commands
+  7. **Robot Control**: Sends commands to mock robot (which updates simulator)
+  8. **Line Check**: Tracks line crossings as milestones
+  9. **Visualization**: Updates display with current state, path, and progress
 
 - **Configuration**: Supports command-line arguments:
-  - `--stop-at-line`: Which line to stop at (1, 2, or 3) - **Key challenge parameter**
+  - `--stop-at-line`: Which line to track as milestone (1, 2, or 3) - milestone only, robot continues to top
   - `--initial-x`, `--initial-y`, `--initial-theta`: Starting position
   - `--max-iterations`: Maximum loop iterations
+  - `goal_y`: Configurable goal Y coordinate (default: 3.5m - top of arena)
 
 - **Default Arena Setup**:
   - Arena: 2.5m × 4.0m
-  - Lines: 3 horizontal lines at y = 1.0, 2.0, 3.0 meters
+  - Lines: 3 horizontal lines at y = 1.0, 2.0, 3.0 meters (milestone markers)
   - Obstacles: 2 obstacles at (1.0, 2.0) radius 0.2m and (1.5, 1.5) radius 0.15m
-  - Targets: 3 blue targets at various positions
+  - Main Goal: Green target at (1.25, 3.5) - top center of arena
+  - Intermediate Targets: Blue waypoints at (2.0, 3.2) and (0.5, 2.8) to guide navigation
 
 - **Error Handling**: Graceful shutdown on keyboard interrupt, exception handling with traceback.
 
 **Key Features**:
-- Challenge-compliant: Implements line stopping requirement
+- **Objective-focused**: Navigate to top of arena while avoiding obstacles
+- **Visual path tracking**: Real-time display of robot's trajectory
+- **Enhanced visualization**: 
+  - Green line shows actual robot path
+  - Orange squares show planned waypoints
+  - Red dashed line shows path to next waypoint
+  - Progress percentage and distance to goal
 - Configurable: Easy to adjust arena layout and parameters
 - Realistic: Uses same navigation modules as real robot
-- Visual: Real-time visualization for debugging
+- Visual: Real-time visualization for debugging and demonstration
 
 **Usage Example**:
 ```bash
-# Stop at second line
-python simulate_navigation.py --stop-at-line 2
+# Navigate to top (tracks line 1 as milestone)
+python3 simulate.py --stop-at-line 1
 
 # Custom starting position
-python simulate_navigation.py --stop-at-line 3 --initial-x 0.3 --initial-y 0.5
+python3 simulate.py --stop-at-line 2 --initial-x 0.3 --initial-y 0.5
 ```
+
+**Visualization Elements**:
+- 🔵 Blue circle with arrow = Robot (arrow shows orientation)
+- 🟢 Large green circle = Main goal at top of arena
+- 🔵 Blue circles = Intermediate waypoint targets
+- 🔴 Red circles = Obstacles to avoid
+- 🟢 Green line = Robot's actual path (trajectory)
+- 🟠 Orange squares = Planned waypoints
+- 🔴 Red dashed line = Path to next waypoint
+- 📊 Status box = State, position, progress, distance to goal
 
 ---
 
