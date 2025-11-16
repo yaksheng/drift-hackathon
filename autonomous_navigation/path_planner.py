@@ -26,6 +26,7 @@ class Obstacle:
     y: float  # Y position in world coordinates
     radius: float  # Obstacle radius in meters
     confidence: float = 1.0  # Detection confidence
+    color: Optional[str] = None  # Obstacle color (for visualization/identification)
 
 
 class PathPlanner:

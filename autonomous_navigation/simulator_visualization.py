@@ -61,20 +61,39 @@ class ArenaVisualizer:
         )
         self.ax.add_patch(rect)
     
-    def draw_obstacles(self, obstacles: List[Tuple[float, float, float]]):
-        """Draw obstacles"""
+    def draw_obstacles(self, obstacles: List[Tuple[float, float, float]], 
+                      obstacle_colors: Optional[List[str]] = None):
+        """
+        Draw obstacles
+        
+        Args:
+            obstacles: List of (x, y, radius) tuples
+            obstacle_colors: Optional list of colors for each obstacle
+        """
         # Clear existing obstacles
         for circle in self.obstacle_circles:
             circle.remove()
         self.obstacle_circles = []
         
-        for x, y, radius in obstacles:
+        for i, (x, y, radius) in enumerate(obstacles):
+            # Use provided color or default to red
+            color = obstacle_colors[i] if obstacle_colors and i < len(obstacle_colors) else 'red'
+            # Set edge color based on obstacle color
+            edge_color_map = {
+                'red': 'darkred',
+                'blue': 'darkblue',
+                'green': 'darkgreen',
+                'yellow': 'gold',
+                'orange': 'darkorange'
+            }
+            edge_color = edge_color_map.get(color, 'black')
+            
             circle = patches.Circle(
                 (x, y),
                 radius,
-                color='red',
+                color=color,
                 alpha=0.5,
-                edgecolor='darkred',
+                edgecolor=edge_color,
                 linewidth=2
             )
             self.ax.add_patch(circle)

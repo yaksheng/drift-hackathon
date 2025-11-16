@@ -22,8 +22,9 @@ from simulator_visualization import ArenaVisualizer
 from mock_robot import MockGalaxyRVR
 from target_detection import TargetDetector
 from robot_localization import RobotLocalizer
-from path_planner import PathPlanner
+from path_planner import PathPlanner, Obstacle
 from navigation_controller import NavigationController, NavigationState
+from obstacle_map import ObstacleMap, get_default_obstacle_map
 
 
 class SimulatedNavigation:
@@ -62,14 +63,25 @@ class SimulatedNavigation:
             arena_bounds=arena_bounds
         )
         
-        # Add default obstacles if none provided
+        # Initialize path planner first
+        self.path_planner = PathPlanner(arena_bounds=arena_bounds)
+        
+        # Load pre-mapped obstacles (known positions, variable properties)
+        self.obstacle_map = get_default_obstacle_map()
+        pre_mapped_obstacles = self.obstacle_map.get_obstacles()
+        
+        # Add pre-mapped obstacles to robot and path planner
         if obstacles:
+            # Use provided obstacles if specified
             for x, y, radius in obstacles:
                 self.robot.add_obstacle(x, y, radius)
+                # Also add to path planner
+                self.path_planner.add_obstacle(Obstacle(x=x, y=y, radius=radius, confidence=1.0))
         else:
-            # Default obstacles
-            self.robot.add_obstacle(1.0, 2.0, 0.2)
-            self.robot.add_obstacle(1.5, 1.5, 0.15)
+            # Use pre-mapped obstacles (known positions)
+            for obs in pre_mapped_obstacles:
+                self.robot.add_obstacle(obs.x, obs.y, obs.radius)
+                self.path_planner.add_obstacle(obs)
         
         # Add default lines if none provided
         if lines:
@@ -110,10 +122,9 @@ class SimulatedNavigation:
         # Create mock robot interface
         self.mock_robot = MockGalaxyRVR(self.robot)
         
-        # Initialize navigation modules
+        # Initialize navigation modules (path_planner already initialized above)
         self.target_detector = TargetDetector()
         self.robot_localizer = RobotLocalizer()
-        self.path_planner = PathPlanner(arena_bounds=arena_bounds)
         self.navigation_controller = NavigationController(self.mock_robot)
         
         # State
@@ -134,7 +145,7 @@ class SimulatedNavigation:
         print(f"📍 Initial position: {self.robot.get_position()}")
         print(f"🎯 Main goal: Blue line at ({self.goal_line[0]:.2f}, {self.goal_line[1]:.2f})")
         print(f"📍 Targets: {len(self.target_positions)}")
-        print(f"🚧 Obstacles: {len(self.robot.obstacles)} (dynamic - can change)")
+        print(f"🚧 Obstacles: {len(self.robot.obstacles)} (pre-mapped, known positions)")
         print(f"📏 Lines: {len(self.robot.lines)} (milestone tracking)")
         print(f"   - Line {self.stop_at_line} crossing will be tracked")
         print()
@@ -350,6 +361,21 @@ class SimulatedNavigation:
         """Update visualization"""
         # Clear and redraw
         self.visualizer.clear()
+        
+        # Draw arena
+        self.visualizer.draw_arena()
+        
+        # Draw obstacles with colors
+        obstacle_colors = []
+        if hasattr(self, 'obstacle_map'):
+            pre_mapped = self.obstacle_map.get_obstacles()
+            if len(pre_mapped) == len(self.robot.obstacles):
+                obstacle_colors = [obs.color or 'red' for obs in pre_mapped]
+            else:
+                obstacle_colors = ['red'] * len(self.robot.obstacles)
+        else:
+            obstacle_colors = ['red'] * len(self.robot.obstacles)
+        self.visualizer.draw_obstacles(self.robot.obstacles, obstacle_colors=obstacle_colors)
         
         # Draw robot
         state = self.robot.get_state()

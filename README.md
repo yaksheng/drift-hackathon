@@ -291,7 +291,8 @@ drift-hackathon/
     ├── __init__.py                   # Package initialization
     ├── target_detection.py           # Target detection module
     ├── robot_localization.py         # Position tracking
-    ├── path_planner.py               # Path planning
+    ├── path_planner.py               # Path planning ✅
+    ├── obstacle_map.py               # Pre-mapped obstacle management ✅
     ├── navigation_controller.py      # Control system
     ├── line_detection.py             # Blue line detection ✅
     ├── main.py                       # Main entry point (real robot)
@@ -500,10 +501,22 @@ python3 autonomous_navigation/capture_calibration_image.py --camera 0
 
 - **Arena Bounds**: Optional arena boundary constraints to keep waypoints within valid area.
 
+- **Pre-Mapped Obstacles**: Obstacles are pre-mapped (known positions) but can have variable properties:
+  - **Known Positions**: Obstacle locations are pre-mapped from arena setup
+  - **Variable Sizes**: Obstacle radii can vary (0.10m - 0.25m)
+  - **Variable Colors**: Obstacles can have different colors (red, blue, green, yellow, orange) for identification
+  - **Confidence Levels**: High-confidence obstacles (pre-mapped) vs. low-confidence sensor-detected obstacles
+
 **Key Classes**:
 - `Waypoint`: Dataclass with x, y coordinates and reached flag.
-- `Obstacle`: Dataclass with position, radius, and confidence.
+- `Obstacle`: Dataclass with position, radius, confidence, and color.
 - `PathPlanner`: Main class with planning, validation, and waypoint management.
+
+**Pre-Mapped Obstacle System** (`obstacle_map.py`):
+- `ObstacleMap`: Manages pre-mapped obstacles with known positions
+- Default map includes 3 obstacles at typical arena positions
+- Supports loading/saving obstacle configurations from JSON files
+- Can apply variations to simulate real-world property differences
 
 **Future Enhancements**: Could implement A* or RRT for more sophisticated path planning in complex environments.
 
@@ -930,7 +943,10 @@ plt.show()
   - Arena: 2.5m × 4.0m
   - Lines: 3 horizontal lines at y = 1.0, 2.0, 3.0 meters (milestone markers)
   - **Main Goal**: Blue line at top (y = 3.5m, center x = 1.25m) - detected from overhead camera
-  - Obstacles: Dynamic - detected from robot sensors (ultrasonic + IR) and can change anytime
+  - **Obstacles**: Pre-mapped obstacles with known positions (reflects real-world conditions)
+    - Default: 3 pre-mapped obstacles at (1.0, 1.5), (1.5, 2.0), (2.0, 1.0)
+    - Obstacles have variable sizes (0.15m - 0.20m radius) and colors (red, blue, green)
+    - Sensor-detected obstacles (from ultrasonic/IR) are added dynamically
   - Intermediate Targets: Blue waypoints to guide navigation toward goal line
 
 - **Error Handling**: Graceful shutdown on keyboard interrupt, exception handling with traceback.
@@ -1196,7 +1212,52 @@ Initial hackathon code provided by Drift.
 
 ---
 
+## 🔄 Recent Updates
+
+### Pre-Mapped Obstacles & Improved Pathfinding ✅
+
+**Changes Made**:
+
+1. **Pre-Mapped Obstacle System** (`obstacle_map.py`):
+   - Obstacles now have known positions (pre-mapped) reflecting real-world conditions
+   - Obstacles can have variable sizes, positions (±0.1m variance), and colors
+   - Default map includes 3 pre-mapped obstacles with different colors
+   - Supports loading/saving obstacle configurations from JSON files
+
+2. **Enhanced Pathfinding Logic**:
+   - Uses improved obstacle avoidance algorithm from commit `b7de67ab`
+   - Better path clearance checking with `is_path_clear()`
+   - Improved blocking obstacle detection with `get_blocking_obstacles()`
+   - Accurate point-to-line-segment distance calculations
+
+3. **Obstacle Data Structure**:
+   - Added `color` field to `Obstacle` dataclass for visualization/identification
+   - Supports color-coded obstacles (red, blue, green, yellow, orange)
+
+4. **Simulation Updates**:
+   - Simulations now use pre-mapped obstacles (known positions)
+   - Visualization supports obstacle colors
+   - Tests updated to reflect real-world conditions
+
+5. **Real-World Conditions**:
+   - ✅ Obstacles are pre-mapped (known positions)
+   - ✅ Variable sizes (0.10m - 0.25m radius)
+   - ✅ Variable colors for identification
+   - ✅ Better pathfinding with improved obstacle avoidance
+
+**Files Modified**:
+- `path_planner.py`: Added color field to Obstacle, improved pathfinding
+- `obstacle_map.py`: New module for pre-mapped obstacle management
+- `simulate_navigation.py`: Updated to use pre-mapped obstacles
+- `simulator_visualization.py`: Added obstacle color support
+- `test_visual_scenarios.py`: Updated to use pre-mapped obstacles
+- `__init__.py`: Added exports for ObstacleMap
+
+See `autonomous_navigation/PRE_MAPPED_OBSTACLES.md` for detailed documentation.
+
+---
+
 **Status**: ✅ Phase 2 Complete - Core Navigation System + Simulation Implemented
-**Last Updated**: Implementation of five key modules and simulation system complete
+**Last Updated**: Pre-mapped obstacles system and improved pathfinding implemented
 **Next Steps**: Phase 3 - Advanced Features & Real Robot Testing
 

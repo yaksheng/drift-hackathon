@@ -16,6 +16,7 @@ from .navigation_controller import NavigationController, NavigationState, Contro
 from .line_detection import LineDetector, DetectedLine
 from .dead_reckoning import DeadReckoning, OdometryState
 from .path_visualization import PathVisualizer
+from .obstacle_map import ObstacleMap, get_default_obstacle_map
 
 __all__ = [
     'TargetDetector',
@@ -33,5 +34,7 @@ __all__ = [
     'DeadReckoning',
     'OdometryState',
     'PathVisualizer',
+    'ObstacleMap',
+    'get_default_obstacle_map',
 ]
 
