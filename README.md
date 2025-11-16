@@ -32,18 +32,21 @@ drift-hackathon/
 │   ├── arena_transform.py   # Perspective transformation
 │   ├── webcam_stream.py     # Camera streaming server
 │   └── webcam_client.py     # Camera client
-└── autonomous_navigation/    # Main navigation system ✅
-    ├── __init__.py           # Package initialization
-    ├── target_detection.py   # Target detection module
-    ├── robot_localization.py # Position tracking
-    ├── path_planner.py       # Path planning
-    ├── navigation_controller.py # Control system
-    ├── dead_reckoning.py     # Odometry for camera delay handling
-    ├── path_visualization.py # Path overlay on camera feed
-    ├── line_detection.py     # Line detection module
-    ├── main.py              # Main entry point
-    ├── example_usage.py     # Usage examples
-    └── requirements.txt     # Dependencies
+├── autonomous_navigation/    # Main navigation system ✅
+│   ├── __init__.py           # Package initialization
+│   ├── target_detection.py   # Target detection module
+│   ├── robot_localization.py # Position tracking
+│   ├── path_planner.py       # Path planning
+│   ├── navigation_controller.py # Control system
+│   ├── dead_reckoning.py     # Odometry for camera delay handling
+│   ├── path_visualization.py # Path overlay on camera feed
+│   ├── line_detection.py     # Line detection module
+│   ├── main.py              # Main entry point
+│   ├── example_usage.py     # Usage examples
+│   └── requirements.txt     # Dependencies
+├── puzzlesolver.py          # AI puzzle solver using OpenAI Vision
+├── test.py                   # Image download utility
+└── test_puzzle_simple.py    # Simple puzzle solver test
 ```
 
 ## 📋 Challenge Analysis
@@ -1100,6 +1103,60 @@ python3 simulate.py --stop-at-line 2 \
 - **Navigation Success Rate**: >90%
 - **Obstacle Avoidance**: 100% (no collisions)
 - **Response Time**: <100ms control loop
+
+## 🧩 Puzzle Solver Tools
+
+The project includes AI-powered puzzle solving tools for the hackathon challenge:
+
+### `puzzlesolver.py`
+An intelligent puzzle solver that uses OpenAI's GPT-4o Vision API to solve visual puzzles.
+
+**Features:**
+- Supports both HTML pages with dynamic images and direct image URLs
+- Uses Selenium to handle JavaScript-rendered pages
+- Automatically detects image type and downloads it
+- Sends images to OpenAI Vision API for puzzle solving
+- Returns answers (1, 2, or 3) based on puzzle content
+
+**Usage:**
+```bash
+# Configure the script with:
+# 1. OpenAI API key
+# 2. Page URL or direct image URL
+# 3. Question/prompt for OpenAI
+
+python3 puzzlesolver.py
+```
+
+**Configuration:**
+- `api_key`: Your OpenAI API key
+- `page_url`: URL of the page or direct image URL (e.g., `https://drift-hack.s3.ap-south-1.amazonaws.com/3.png`)
+- `tag_id`: HTML element ID to find (for HTML pages)
+- `your_question`: Prompt for OpenAI (e.g., "solve the puzzle in this image. your answer should be 1, 2, or 3. only output one number and nothing else")
+
+**How it works:**
+1. Detects if URL is a direct image or HTML page
+2. For HTML pages: Uses Selenium to wait for JavaScript to load dynamic images
+3. Downloads the image into memory
+4. Encodes image as base64
+5. Sends to OpenAI GPT-4o Vision API
+6. Returns the puzzle answer
+
+### `test.py`
+Utility script to download images from dynamic web pages using Selenium.
+
+**Usage:**
+```bash
+python3 test.py
+```
+
+### `test_puzzle_simple.py`
+Simplified test version of the puzzle solver for debugging.
+
+**Dependencies:**
+- `selenium`: For web automation
+- `openai`: For OpenAI API access
+- `requests`: For HTTP requests
 
 ## 🐛 Troubleshooting
 
