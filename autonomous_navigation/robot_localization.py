@@ -74,8 +74,10 @@ class RobotLocalizer:
             upper = np.array([130, 255, 255])
             mask = cv2.inRange(hsv, lower, upper)
         elif self.robot_marker_color == 'green':
-            lower = np.array([40, 50, 50])
-            upper = np.array([80, 255, 255])
+            # Dark green range (for robot's green upper half)
+            # More specific range for dark green
+            lower = np.array([35, 40, 40])  # Lower saturation/value for dark green
+            upper = np.array([85, 255, 255])
             mask = cv2.inRange(hsv, lower, upper)
         elif self.robot_marker_color == 'red':
             lower1 = np.array([0, 50, 50])

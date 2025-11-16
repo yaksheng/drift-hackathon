@@ -1490,7 +1490,40 @@ python3 line_following_navigation.py --robot-ip 192.168.0.113 --camera-url http:
 
 ---
 
+### Robot Detection Improvements ✅
+
+**Recent Updates**:
+
+1. **Enhanced Robot Localization** (`robot_localization.py`):
+   - Improved dark green color detection for robot's green upper half
+   - Updated HSV range: `[35, 40, 40]` to `[85, 255, 255]` for better dark green detection
+   - Lower saturation/value thresholds to detect darker green shades
+   - Better size filtering for 15cm robot
+
+2. **Improved Robot Visualization** (`simulate_line_following.py`):
+   - Robot visualization now matches actual appearance:
+     - Green upper half (dark green)
+     - Light blue lower half
+   - Larger, more visible robot representation (20px radius)
+   - Longer orientation arrow (30px) for better direction indication
+   - Added "ROBOT" label for clarity
+
+3. **Simulation Enhancements**:
+   - Better robot detection from camera feed
+   - More accurate visual representation of robot in simulation
+   - Improved coordinate conversion between pixel and world space
+   - Dynamic path planning with obstacle avoidance
+   - Real-time visualization on camera feed
+
+**Robot Specifications**:
+- Appearance: Dark green upper half, light blue lower half
+- Size: ~15cm diameter
+- Detection: Uses green marker color for localization
+- Visualization: Matches actual robot appearance in simulation
+
+---
+
 **Status**: ✅ Phase 3 Complete - All Advanced Features Implemented
-**Last Updated**: Line following navigation system with real camera feed integration
+**Last Updated**: Robot detection improvements and visualization enhancements
 **Next Steps**: Phase 4 - Testing & Refinement, Real Robot Testing
 

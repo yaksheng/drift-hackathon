@@ -304,7 +304,7 @@ def main():
         print(f"\n💾 Saved visualization to: {output_path}")
         print(f"   Full path: {os.path.abspath(output_path)}")
         
-        # Optionally display (only if DISPLAY is set, for headless systems)
+        # Display visualization window
         try:
             if 'DISPLAY' in os.environ or sys.platform == 'darwin':
                 cv2.imshow('Path Visualization - Camera Feed', annotated_frame)

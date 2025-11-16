@@ -78,15 +78,16 @@ class SimulatedLineFollowing:
         # Initialize modules
         self.mock_robot = MockGalaxyRVR(self.robot)
         self.line_detector = LineDetector(line_color='blue')
-        self.robot_localizer = RobotLocalizer(robot_marker_color='green')
+        # Initialize robot localizer with improved settings for dark green robot
+        self.robot_localizer = RobotLocalizer(
+            robot_marker_color='green',
+            robot_size=0.15  # 15cm robot
+        )
         self.navigation_controller = NavigationController(self.mock_robot, max_speed=60, min_speed=30)
         self.dead_reckoning = DeadReckoning()
         
-        # Visualization
-        self.visualizer = ArenaVisualizer(arena_bounds)
-        self.visualizer.draw_arena()
+        # Visualization - using OpenCV on camera feed (not matplotlib)
         # Obstacles will be drawn from camera detection, not pre-mapped
-        plt.ion()  # Interactive mode
         
         # State
         self.current_pose = None
@@ -167,6 +168,129 @@ class SimulatedLineFollowing:
         cv2.ellipse(img, (robot_px, robot_py - 5), (20, 15), 0, 0, 180, (0, 255, 0), -1)  # Green upper half
         
         return img
+    
+    def draw_path_on_camera_feed(self,
+                                frame: np.ndarray,
+                                pose: Optional,
+                                detected_lines: List[DetectedLine],
+                                waypoints: List[Waypoint],
+                                obstacles: List,
+                                path_history: List[Tuple[float, float]],
+                                iteration: int = 0) -> np.ndarray:
+        """
+        Draw path visualization directly on camera feed image
+        
+        Args:
+            frame: Camera feed frame (base image)
+            pose: Current robot pose
+            detected_lines: Detected lines
+            waypoints: Planned waypoints
+            obstacles: Detected obstacles
+            path_history: Robot path history
+            
+        Returns:
+            Annotated frame with path visualization
+        """
+        vis_frame = frame.copy()
+        h, w = frame.shape[:2]
+        
+        # Convert between world coordinates and pixel coordinates
+        # Assume arena is 2.5m x 4.0m mapped to image size
+        # For camera feed, we need to handle pixel coordinates directly
+        def world_to_pixel(wx, wy):
+            # If coordinates look like pixel coordinates (large values), use directly
+            if wx > 100 or wy > 100:
+                return int(wx), int(wy)
+            # Otherwise convert from world meters to pixel coordinates
+            # Image is typically 640x480, arena is 2.5m x 4.0m
+            px = int((wx / 2.5) * w)
+            py = int((wy / 4.0) * h)
+            return px, py
+        
+        def pixel_to_world(px, py):
+            # Convert pixel coordinates to world coordinates
+            # Image is typically 640x480, arena is 2.5m x 4.0m
+            wx = (px / w) * 2.5
+            wy = (py / h) * 4.0
+            return wx, wy
+        
+        # Draw detected obstacles (colored circles)
+        for obs in obstacles:
+            px, py = world_to_pixel(obs.world_pos[0], obs.world_pos[1])
+            radius_px = max(5, int((obs.radius / 2.5) * w))
+            
+            # Color mapping (BGR for OpenCV)
+            color_map = {
+                'red': (0, 0, 255),
+                'blue': (255, 0, 0),
+                'green': (0, 255, 0),
+                'yellow': (0, 255, 255),
+                'orange': (0, 165, 255)
+            }
+            color = color_map.get(obs.color, (128, 128, 128))
+            cv2.circle(vis_frame, (px, py), radius_px, color, 2)
+            cv2.circle(vis_frame, (px, py), 2, color, -1)
+        
+        # Draw detected lines (blue)
+        for line in detected_lines:
+            px1, py1 = world_to_pixel(line.world_start[0], line.world_start[1])
+            px2, py2 = world_to_pixel(line.world_end[0], line.world_end[1])
+            cv2.line(vis_frame, (px1, py1), (px2, py2), (255, 0, 0), 2)
+        
+        # Draw path history (green line showing robot trajectory)
+        if len(path_history) > 1:
+            for i in range(len(path_history) - 1):
+                px1, py1 = world_to_pixel(path_history[i][0], path_history[i][1])
+                px2, py2 = world_to_pixel(path_history[i+1][0], path_history[i+1][1])
+                cv2.line(vis_frame, (px1, py1), (px2, py2), (0, 255, 0), 2)
+        
+        # Draw waypoints (yellow circles)
+        for waypoint in waypoints:
+            px, py = world_to_pixel(waypoint.x, waypoint.y)
+            cv2.circle(vis_frame, (px, py), 5, (0, 255, 255), -1)
+            cv2.circle(vis_frame, (px, py), 8, (0, 255, 255), 1)
+        
+        # Draw planned path (green line from robot to waypoints)
+        if pose and waypoints:
+            robot_px, robot_py = world_to_pixel(pose.x, pose.y)
+            for waypoint in waypoints:
+                wp_px, wp_py = world_to_pixel(waypoint.x, waypoint.y)
+                cv2.line(vis_frame, (robot_px, robot_py), (wp_px, wp_py), (0, 255, 0), 1)
+                robot_px, robot_py = wp_px, wp_py
+        
+        # Draw robot position (matching actual robot: green upper, light blue lower)
+        if pose:
+            robot_px, robot_py = world_to_pixel(pose.x, pose.y)
+            
+            # Draw robot body matching actual appearance (green upper, light blue lower)
+            # Lower half (light blue)
+            cv2.circle(vis_frame, (robot_px, robot_py), 20, (255, 200, 100), -1)  # Light blue
+            # Upper half (dark green)
+            cv2.ellipse(vis_frame, (robot_px, robot_py - 5), (20, 15), 0, 0, 180, (0, 150, 0), -1)  # Dark green upper half
+            
+            # Draw outline
+            cv2.circle(vis_frame, (robot_px, robot_py), 20, (0, 200, 0), 2)
+            
+            # Draw orientation arrow (longer for visibility)
+            arrow_length = 30
+            end_x = int(robot_px + arrow_length * np.cos(pose.theta))
+            end_y = int(robot_py + arrow_length * np.sin(pose.theta))
+            cv2.arrowedLine(vis_frame, (robot_px, robot_py), (end_x, end_y), (0, 255, 0), 3, tipLength=0.3)
+            
+            # Draw robot label
+            cv2.putText(vis_frame, "ROBOT", (robot_px - 30, robot_py - 25),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+        
+        # Add text overlay with status
+        status_text = f"Iter: {iteration} | Lines: {len(detected_lines)} | Waypoints: {len(waypoints)} | Obstacles: {len(obstacles)}"
+        if pose:
+            status_text += f" | Pos: ({pose.x:.2f}, {pose.y:.2f})"
+        cv2.putText(vis_frame, status_text, (10, 30), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        cv2.putText(vis_frame, status_text, (10, 30), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 1)
+        
+        return vis_frame
     
     def find_path_along_line(self, 
                             robot_pos: Tuple[float, float],
@@ -336,21 +460,46 @@ class SimulatedLineFollowing:
                 # Fallback to synthetic only if camera not available
                 overhead_frame = self.create_synthetic_overhead_image()
             
-            # Localize robot
-            pose = self.robot_localizer.localize(overhead_frame)
-            if pose:
+            # Localize robot from camera feed (for obstacle/line detection reference)
+            # But allow simulated robot to move based on motor commands
+            camera_pose = self.robot_localizer.localize(overhead_frame)
+            
+            # Get current simulated robot state (this is what moves)
+            state = self.robot.get_state()
+            
+            # Use camera pose if available, otherwise use simulated robot position
+            if camera_pose:
+                # Update dead reckoning with camera measurement (for reference)
                 if self.dead_reckoning.odometry is None:
-                    self.dead_reckoning.initialize((pose.x, pose.y), pose.theta)
+                    self.dead_reckoning.initialize((camera_pose.x, camera_pose.y), camera_pose.theta)
                 else:
-                    self.dead_reckoning.update_from_camera((pose.x, pose.y), pose.theta)
-                self.current_pose = pose
+                    self.dead_reckoning.update_from_camera((camera_pose.x, camera_pose.y), camera_pose.theta)
+                
+                # Use camera pose as current pose (for path planning)
+                from robot_localization import RobotPose
+                self.current_pose = RobotPose(
+                    x=state.x,  # Use simulated robot position for movement
+                    y=state.y,
+                    theta=state.theta,
+                    confidence=0.8
+                )
             else:
+                # Use dead reckoning or simulated robot position
                 dr_pose = self.dead_reckoning.get_estimated_pose()
                 if dr_pose:
                     from robot_localization import RobotPose
                     self.current_pose = RobotPose(
                         x=dr_pose[0], y=dr_pose[1], theta=dr_pose[2], confidence=0.5
                     )
+                else:
+                    # Use simulated robot position
+                    from robot_localization import RobotPose
+                    self.current_pose = RobotPose(
+                        x=state.x, y=state.y, theta=state.theta, confidence=0.7
+                    )
+            
+            # Track position history for visualization (use simulated robot position)
+            self.path_history.append((state.x, state.y))
             
             # Detect lines
             lines = self.line_detector.detect_lines(overhead_frame, None)
@@ -371,116 +520,156 @@ class SimulatedLineFollowing:
             self.path_planner.obstacles = []
             # Clear robot obstacles and re-add from camera
             self.robot.obstacles = []
+            
+            # Convert obstacle coordinates from pixel to world space if needed
+            h, w = overhead_frame.shape[:2]
             for det_obs in detected_obs:
+                obs_x, obs_y = det_obs.world_pos[0], det_obs.world_pos[1]
+                # If coordinates are in pixel space (large values), convert to world
+                if obs_x > 100 or obs_y > 100:
+                    obs_wx = (obs_x / w) * 2.5  # Convert to meters
+                    obs_wy = (obs_y / h) * 4.0
+                else:
+                    obs_wx, obs_wy = obs_x, obs_y
+                
+                # Convert radius too (assuming it's in pixel space if obstacle is)
+                if obs_x > 100 or obs_y > 100:
+                    obs_radius = (det_obs.radius / w) * 2.5  # Convert to meters
+                else:
+                    obs_radius = det_obs.radius
+                
                 obstacle = Obstacle(
-                    x=det_obs.world_pos[0],
-                    y=det_obs.world_pos[1],
-                    radius=det_obs.radius,
+                    x=obs_wx,
+                    y=obs_wy,
+                    radius=obs_radius,
                     confidence=det_obs.confidence,
                     color=det_obs.color
                 )
                 self.path_planner.add_obstacle(obstacle)
                 # Also add to robot for collision detection
-                self.robot.add_obstacle(det_obs.world_pos[0], det_obs.world_pos[1], det_obs.radius)
+                self.robot.add_obstacle(obs_wx, obs_wy, obs_radius)
             
-            # Select best line and create path
-            if self.current_pose and lines:
+            # Select best line and plan dynamic path (avoiding obstacles)
+            # Use simulated robot position for path planning
+            state = self.robot.get_state()
+            if state and lines:
                 best_line = self.select_best_line(
-                    (self.current_pose.x, self.current_pose.y),
-                    self.current_pose.theta
+                    (state.x, state.y),
+                    state.theta
                 )
                 
                 if best_line:
-                    waypoints = self.find_path_along_line(
-                        (self.current_pose.x, self.current_pose.y),
-                        self.current_pose.theta,
-                        best_line
-                    )
+                    # Plan dynamic path to middle of top three lines (avoiding obstacles)
+                    # Convert line center from pixel to world coordinates if needed
+                    goal_px, goal_py = best_line.center[0], best_line.center[1]
+                    # If coordinates are in pixel space (large values), convert to world
+                    if goal_px > 100 or goal_py > 100:
+                        h, w = overhead_frame.shape[:2]
+                        goal_wx = (goal_px / w) * 2.5  # Convert to meters
+                        goal_wy = (goal_py / h) * 4.0
+                        goal_pos = (goal_wx, goal_wy)
+                    else:
+                        goal_pos = (goal_px, goal_py)
                     
-                    if waypoints:
-                        self.path_waypoints = waypoints
-                        next_waypoint = waypoints[0]
+                    # Replan path dynamically (this will avoid obstacles)
+                    # Replan every 20 iterations to adapt to robot movement
+                    if iteration % 20 == 0 or not self.path_waypoints or all(wp.reached for wp in self.path_waypoints):
+                        self.path_planner.replan_path(
+                            (state.x, state.y),
+                            goal_pos
+                        )
+                        self.path_waypoints = self.path_planner.current_path
+                        # Reset reached flags for new path
+                        for wp in self.path_waypoints:
+                            wp.reached = False
+                        if self.path_waypoints:
+                            print(f"\n🗺️  Replanned path: {len(self.path_waypoints)} waypoints from ({state.x:.2f}, {state.y:.2f}) to goal ({goal_pos[0]:.2f}, {goal_pos[1]:.2f})")
+                    
+                    # Get next waypoint
+                    next_waypoint = None
+                    for wp in self.path_waypoints:
+                        if not wp.reached:
+                            next_waypoint = wp
+                            break
+                    
+                    if next_waypoint:
                         self.navigation_controller.set_waypoint(
                             (next_waypoint.x, next_waypoint.y)
                         )
+                        # Force navigation state if in IDLE
+                        if self.navigation_controller.state == NavigationState.IDLE:
+                            self.navigation_controller.state = NavigationState.NAVIGATING
             
-            # Update navigation controller
-            if self.current_pose:
-                command = self.navigation_controller.update(
-                    (self.current_pose.x, self.current_pose.y),
-                    self.current_pose.theta,
-                    0.1
-                )
+            # Update navigation controller and send commands
+            if self.current_pose and self.path_waypoints:
+                # Get next unreached waypoint
+                next_waypoint = None
+                for wp in self.path_waypoints:
+                    if not wp.reached:
+                        next_waypoint = wp
+                        break
                 
-                self.dead_reckoning.update_from_motors(
-                    command.left_motor,
-                    command.right_motor
-                )
-                
-                self.mock_robot.set_motors(command.left_motor, command.right_motor)
-                await self.mock_robot.send()
-            
-            # Update robot physics
-            self.robot.update(0.1)
-            
-            # Add to path history
-            if self.current_pose:
-                self.path_history.append((self.current_pose.x, self.current_pose.y))
-            
-            # Update visualization
-            if iteration % 10 == 0:  # Update every 10 iterations
-                state = self.robot.get_state()
-                # Clear and redraw
-                self.visualizer.ax.clear()
-                self.visualizer.draw_arena()
-                
-                # Draw obstacles detected from camera (real obstacles only)
-                # These are the actual obstacles visible in the camera feed
-                if self.detected_obstacles:
-                    obstacle_list = [(obs.world_pos[0], obs.world_pos[1], obs.radius) 
-                                    for obs in self.detected_obstacles]
-                    obstacle_colors = [obs.color if obs.color else 'red' 
-                                      for obs in self.detected_obstacles]
-                    self.visualizer.draw_obstacles(obstacle_list, obstacle_colors=obstacle_colors)
-                    
-                    # Also print obstacle info for debugging
-                    if iteration % 100 == 0:
-                        print(f"\n📊 Visualization: Showing {len(self.detected_obstacles)} obstacles from camera feed")
-                
-                # Draw robot
-                self.visualizer.draw_robot(state)
-                
-                # Draw detected lines
-                for line in self.detected_lines:
-                    self.visualizer.ax.plot(
-                        [line.world_start[0], line.world_end[0]],
-                        [line.world_start[1], line.world_end[1]],
-                        'b-', linewidth=2, alpha=0.7, label='Detected Lines'
+                if next_waypoint:
+                    # Use simulated robot position for control
+                    state = self.robot.get_state()
+                    command = self.navigation_controller.update(
+                        (state.x, state.y),
+                        state.theta,
+                        0.1
                     )
+                    
+                    # Debug: Print motor commands occasionally
+                    if iteration % 50 == 0:
+                        print(f"\n🎮 Motor commands: left={command.left_motor}, right={command.right_motor}, state={self.navigation_controller.state}")
+                    
+                    # Update dead reckoning with motor commands
+                    self.dead_reckoning.update_from_motors(
+                        command.left_motor,
+                        command.right_motor
+                    )
+                    
+                    # Send motor commands to simulated robot (this will make it move)
+                    self.mock_robot.set_motors(command.left_motor, command.right_motor)
+                    await self.mock_robot.send()
+                    
+                    # Update robot physics - this actually moves the robot
+                    self.robot.update(0.1)
+                    
+                    # Update current pose from simulated robot state
+                    state = self.robot.get_state()
+                    from robot_localization import RobotPose
+                    self.current_pose = RobotPose(
+                        x=state.x, y=state.y, theta=state.theta, confidence=0.8
+                    )
+                    
+                    # Check if waypoint reached
+                    dist_to_waypoint = math.sqrt(
+                        (state.x - next_waypoint.x)**2 + 
+                        (state.y - next_waypoint.y)**2
+                    )
+                    if dist_to_waypoint < 0.15:  # 15cm threshold
+                        next_waypoint.reached = True
+                        print(f"\n✓ Reached waypoint at ({next_waypoint.x:.2f}, {next_waypoint.y:.2f})")
+            else:
+                # Still update robot physics even if no waypoint
+                self.robot.update(0.1)
+            
+            # Update visualization on camera feed (base image)
+            if iteration % 5 == 0:  # Update more frequently for smoother visualization
+                # Create visualization overlay on camera feed
+                vis_frame = self.draw_path_on_camera_feed(
+                    overhead_frame.copy(),
+                    self.current_pose,
+                    self.detected_lines,
+                    self.path_waypoints,
+                    self.detected_obstacles,
+                    self.path_history,
+                    iteration
+                )
                 
-                # Draw waypoints
-                if self.path_waypoints:
-                    waypoint_x = [wp.x for wp in self.path_waypoints]
-                    waypoint_y = [wp.y for wp in self.path_waypoints]
-                    self.visualizer.ax.plot(waypoint_x, waypoint_y, 'go-', 
-                                          markersize=8, linewidth=1, alpha=0.6, label='Waypoints')
-                
-                # Draw path history
-                if hasattr(self, 'path_history'):
-                    if self.path_history:
-                        path_x = [p[0] for p in self.path_history]
-                        path_y = [p[1] for p in self.path_history]
-                        self.visualizer.ax.plot(path_x, path_y, 'g-', 
-                                              linewidth=1, alpha=0.4, label='Robot Path')
-                
-                # Update status with obstacle info (from camera)
-                num_obstacles = len(self.detected_obstacles)
-                status = f"Iteration: {iteration} | Lines: {len(self.detected_lines)} | Waypoints: {len(self.path_waypoints)} | Obstacles (camera): {num_obstacles}"
-                if self.current_pose:
-                    status += f" | Pos: ({self.current_pose.x:.2f}, {self.current_pose.y:.2f})"
-                self.visualizer.update_status(status)
-                
-                plt.pause(0.01)
+                # Display the visualization
+                cv2.imshow('Line Following Navigation - Camera Feed', vis_frame)
+                cv2.waitKey(1)  # Non-blocking wait
             
             iteration += 1
             
@@ -496,6 +685,9 @@ class SimulatedLineFollowing:
                 await camera_stream_task
             except asyncio.CancelledError:
                 pass
+        
+        # Close OpenCV windows
+        cv2.destroyAllWindows()
         
         print("\n✅ Navigation complete!")
 
