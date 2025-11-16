@@ -522,6 +522,107 @@ python3 autonomous_navigation/capture_calibration_image.py --camera 0
 
 ---
 
+### 3.5 Hybrid Vision System (`hybrid_vision.py`) ✅
+
+**Purpose**: Integrate overhead camera (global view) with onboard camera (local view) for improved navigation.
+
+**Implementation Details**:
+
+- **Vision Fusion**: Combines data from overhead and onboard cameras
+  - Overhead camera: Global target detection, robot localization, path planning
+  - Onboard camera: Local obstacle detection, target verification, fine navigation
+  - Weighted fusion: Overhead (70%) + Onboard (30%)
+
+- **Target Detection**:
+  - Overhead: Detects all targets in arena
+  - Onboard: Verifies targets detected by overhead camera
+  - Duplicate removal: Filters same targets seen from different views
+
+- **Obstacle Detection**:
+  - Onboard camera uses edge detection and contour analysis
+  - Detects obstacles in robot's local view
+  - Converts to world coordinates for path planning
+
+- **Confidence Management**: Tracks confidence in fused results based on:
+  - Overhead camera availability and quality
+  - Onboard camera availability and quality
+  - Number of targets/obstacles detected
+
+**Key Classes**:
+- `VisionFusion`: Dataclass containing fused vision results
+- `HybridVisionSystem`: Main class for vision fusion
+
+---
+
+### 3.6 Error Recovery System (`error_recovery.py`) ✅
+
+**Purpose**: Detect navigation errors and implement recovery behaviors.
+
+**Implementation Details**:
+
+- **Error Detection**:
+  - **Stuck Detection**: Monitors position history, detects lack of progress
+  - **Lost Localization**: Detects when robot position is unknown
+  - **Obstacle Blocked**: Detects when path is completely blocked
+  - **Timeout**: Monitors operation duration
+  - **Sensor Failure**: Detects invalid sensor readings
+
+- **Recovery Behaviors**:
+  - **Stuck**: Back up, turn left/right alternately
+  - **Lost**: Rotate in place to help camera find robot
+  - **Blocked**: Back up and try different direction
+  - **Timeout**: Stop and reassess
+  - **Sensor Failure**: Stop for safety
+
+- **Position Tracking**: Maintains position history for stuck detection
+  - Tracks last 50 positions with timestamps
+  - Calculates movement over time windows
+  - Detects stuck if movement < threshold over time period
+
+**Key Classes**:
+- `ErrorType`: Enum for error types
+- `ErrorState`: Dataclass for error state tracking
+- `ErrorRecovery`: Main class for error detection and recovery
+
+---
+
+### 3.7 Performance Optimizer (`performance_optimizer.py`) ✅
+
+**Purpose**: Optimize navigation system performance.
+
+**Implementation Details**:
+
+- **Adaptive Frame Skipping**: Maintains target FPS (default 10 FPS)
+  - Skips frames if processing is too slow
+  - Adaptively adjusts skip rate based on performance
+  - Prevents system overload
+
+- **Result Caching**: Caches expensive computations
+  - Configurable cache size (default 10 entries)
+  - Tracks cache hit/miss rates
+  - FIFO eviction policy
+
+- **Processing Time Tracking**: Monitors frame processing time
+  - Tracks last 30 frames
+  - Calculates average processing time
+  - Adjusts frame skipping based on performance
+
+- **Performance Metrics**:
+  - Frame rate (FPS)
+  - Processing time per frame
+  - Cache hit rate
+  - Skipped frames count
+
+- **Optimization Modes**:
+  - **Low Power**: Reduced FPS (5 FPS), increased frame skipping
+  - **Performance**: Maximum FPS (15 FPS), minimal skipping
+
+**Key Classes**:
+- `PerformanceMetrics`: Dataclass for performance metrics
+- `PerformanceOptimizer`: Main class for performance optimization
+
+---
+
 ### 4. Navigation Controller (`navigation_controller.py`) ✅
 
 **Purpose**: Control robot movement using PID control and state machine.
@@ -1314,7 +1415,7 @@ See `autonomous_navigation/PRE_MAPPED_OBSTACLES.md` for detailed documentation.
 
 ---
 
-**Status**: ✅ Phase 2 Complete - Core Navigation System + Simulation Implemented
-**Last Updated**: Pre-mapped obstacles system and improved pathfinding implemented
-**Next Steps**: Phase 3 - Advanced Features & Real Robot Testing
+**Status**: ✅ Phase 3 Complete - All Advanced Features Implemented
+**Last Updated**: Phase 3 features (hybrid vision, error recovery, performance optimization) implemented
+**Next Steps**: Phase 4 - Testing & Refinement, Real Robot Testing
 

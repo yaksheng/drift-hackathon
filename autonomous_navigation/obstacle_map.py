@@ -6,9 +6,14 @@ are known positions but may have variable sizes, positions, and colors.
 """
 
 from typing import List, Tuple, Optional
-from path_planner import Obstacle
 import json
 import os
+import sys
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
+from autonomous_navigation.path_planner import Obstacle
 
 
 class ObstacleMap:
