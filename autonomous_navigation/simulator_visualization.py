@@ -80,6 +80,24 @@ class ArenaVisualizer:
             self.ax.add_patch(circle)
             self.obstacle_circles.append(circle)
     
+    def draw_sensor_obstacles(self, obstacles: List[Tuple[float, float, float]]):
+        """Draw obstacles detected by sensors (different style)"""
+        for i, (x, y, radius) in enumerate(obstacles):
+            circle = patches.Circle(
+                (x, y),
+                radius,
+                color='orange',
+                alpha=0.3,
+                edgecolor='darkorange',
+                linewidth=1,
+                linestyle='--',
+                label='Sensor Obstacle' if i == 0 else None
+            )
+            self.ax.add_patch(circle)
+            self.obstacle_circles.append(circle)
+        if obstacles:
+            self.ax.legend()
+    
     def draw_lines(self, lines: List[Tuple[float, float, float, float]], 
                    stop_line_index: Optional[int] = None):
         """
@@ -111,6 +129,37 @@ class ArenaVisualizer:
         
         if stop_line_index is not None:
             self.ax.legend()
+    
+    def draw_goal_line(self, start: Tuple[float, float], end: Tuple[float, float]):
+        """
+        Draw the goal blue line at the top
+        
+        Args:
+            start: (x, y) start point
+            end: (x, y) end point
+        """
+        goal_line = self.ax.plot(
+            [start[0], end[0]],
+            [start[1], end[1]],
+            color='blue',
+            linewidth=5,
+            linestyle='-',
+            alpha=0.8,
+            label='Goal: Blue Line',
+            zorder=4
+        )[0]
+        self.line_segments.append(goal_line)
+        
+        # Add label
+        mid_x = (start[0] + end[0]) / 2
+        mid_y = (start[1] + end[1]) / 2
+        self.ax.annotate('GOAL LINE', (mid_x, mid_y),
+                        xytext=(0, -20), textcoords='offset points',
+                        fontsize=14, fontweight='bold',
+                        ha='center',
+                        bbox=dict(boxstyle='round,pad=0.5', facecolor='yellow', alpha=0.8),
+                        zorder=5)
+        self.ax.legend()
     
     def draw_robot(self, state: SimulatedRobotState):
         """Draw robot at current position"""

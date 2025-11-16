@@ -13,6 +13,7 @@ from .target_detection import TargetDetector, Target
 from .robot_localization import RobotLocalizer, RobotPose
 from .path_planner import PathPlanner, Waypoint, Obstacle
 from .navigation_controller import NavigationController, NavigationState, ControlCommand
+from .line_detection import LineDetector, DetectedLine
 
 __all__ = [
     'TargetDetector',
@@ -25,5 +26,7 @@ __all__ = [
     'NavigationController',
     'NavigationState',
     'ControlCommand',
+    'LineDetector',
+    'DetectedLine',
 ]
 

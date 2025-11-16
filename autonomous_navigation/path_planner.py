@@ -50,6 +50,59 @@ class PathPlanner:
         """Add an obstacle to the map"""
         self.obstacles.append(obstacle)
     
+    def update_obstacle_from_sensors(self, 
+                                    robot_pos: Tuple[float, float],
+                                    robot_theta: float,
+                                    ultrasonic_distance: Optional[float],
+                                    ir_left: Optional[int],
+                                    ir_right: Optional[int]):
+        """
+        Update obstacles dynamically from sensor readings
+        
+        Args:
+            robot_pos: Current robot position (x, y)
+            robot_theta: Current robot orientation
+            ultrasonic_distance: Forward distance in cm (None if no reading)
+            ir_left: Left IR sensor (1=obstacle, 0=clear)
+            ir_right: Right IR sensor (1=obstacle, 0=clear)
+        """
+        # Clear old sensor-based obstacles
+        self.obstacles = [obs for obs in self.obstacles if obs.confidence >= 0.9]  # Keep high-confidence obstacles
+        
+        # Add forward obstacle from ultrasonic
+        if ultrasonic_distance is not None and ultrasonic_distance < 50:  # Less than 50cm
+            # Convert to meters
+            dist_m = ultrasonic_distance / 100.0
+            
+            # Calculate obstacle position in front of robot
+            obs_x = robot_pos[0] + dist_m * np.cos(robot_theta)
+            obs_y = robot_pos[1] + dist_m * np.sin(robot_theta)
+            
+            # Add obstacle (smaller confidence since it's from sensors)
+            obstacle = Obstacle(
+                x=obs_x,
+                y=obs_y,
+                radius=0.15,  # Assume 15cm radius
+                confidence=0.7  # Lower confidence for sensor-based obstacles
+            )
+            self.obstacles.append(obstacle)
+        
+        # Add side obstacles from IR sensors
+        side_offset = 0.15  # 15cm to the side
+        if ir_left == 1:
+            # Obstacle on left side
+            obs_x = robot_pos[0] + side_offset * np.cos(robot_theta + np.pi/2)
+            obs_y = robot_pos[1] + side_offset * np.sin(robot_theta + np.pi/2)
+            obstacle = Obstacle(x=obs_x, y=obs_y, radius=0.10, confidence=0.6)
+            self.obstacles.append(obstacle)
+        
+        if ir_right == 1:
+            # Obstacle on right side
+            obs_x = robot_pos[0] + side_offset * np.cos(robot_theta - np.pi/2)
+            obs_y = robot_pos[1] + side_offset * np.sin(robot_theta - np.pi/2)
+            obstacle = Obstacle(x=obs_x, y=obs_y, radius=0.10, confidence=0.6)
+            self.obstacles.append(obstacle)
+    
     def clear_obstacles(self):
         """Clear all obstacles"""
         self.obstacles = []

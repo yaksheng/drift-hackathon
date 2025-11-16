@@ -675,10 +675,11 @@ plt.show()
   - Sets up default arena configuration (bounds, obstacles, lines, targets)
   - Configures challenge parameters (which line to stop at)
 
-- **Main Objective**: Reach the top of the arena (y = 3.5m) while avoiding obstacles
-  - Primary goal is a green target at the top center of the arena
-  - Robot navigates from bottom to top, avoiding obstacles
-  - Success when robot reaches within 10cm of goal Y coordinate
+- **Main Objective**: Reach the middle blue line at the top of the arena while avoiding obstacles
+  - Primary goal is the blue line detected from overhead camera at top of arena
+  - Robot navigates from bottom to top, avoiding dynamic obstacles
+  - Success when robot reaches within 15cm of blue line Y coordinate and 30cm of center X
+  - Blue line is detected using Hough line detection on color-filtered image
   
 - **Line Crossing Tracking** (Milestone): 
   - Tracks which lines have been crossed using boolean array: `line_crossed = [False, False, False]`
@@ -706,18 +707,23 @@ plt.show()
 - **Default Arena Setup**:
   - Arena: 2.5m × 4.0m
   - Lines: 3 horizontal lines at y = 1.0, 2.0, 3.0 meters (milestone markers)
-  - Obstacles: 2 obstacles at (1.0, 2.0) radius 0.2m and (1.5, 1.5) radius 0.15m
-  - Main Goal: Green target at (1.25, 3.5) - top center of arena
-  - Intermediate Targets: Blue waypoints at (2.0, 3.2) and (0.5, 2.8) to guide navigation
+  - **Main Goal**: Blue line at top (y = 3.5m, center x = 1.25m) - detected from overhead camera
+  - Obstacles: Dynamic - detected from robot sensors (ultrasonic + IR) and can change anytime
+  - Intermediate Targets: Blue waypoints to guide navigation toward goal line
 
 - **Error Handling**: Graceful shutdown on keyboard interrupt, exception handling with traceback.
 
 **Key Features**:
-- **Objective-focused**: Navigate to top of arena while avoiding obstacles
+- **Objective-focused**: Navigate to middle blue line at top of arena while avoiding obstacles
+- **Dynamic obstacle detection**: Obstacles detected in real-time from robot sensors (ultrasonic + IR)
+- **Blue line detection**: Uses Hough line detection to find goal line from overhead camera
 - **Visual path tracking**: Real-time display of robot's trajectory
 - **Enhanced visualization**: 
+  - Blue line at top = Main goal (thick blue line with "GOAL LINE" label)
   - Green line shows actual robot path
   - Orange squares show planned waypoints
+  - Red circles = Static obstacles
+  - Orange circles = Sensor-detected obstacles (dynamic)
   - Red dashed line shows path to next waypoint
   - Progress percentage and distance to goal
 - Configurable: Easy to adjust arena layout and parameters
@@ -735,13 +741,14 @@ python3 simulate.py --stop-at-line 2 --initial-x 0.3 --initial-y 0.5
 
 **Visualization Elements**:
 - 🔵 Blue circle with arrow = Robot (arrow shows orientation)
-- 🟢 Large green circle = Main goal at top of arena
+- 🔵 **Thick blue line at top = Main goal (middle blue line from camera)**
 - 🔵 Blue circles = Intermediate waypoint targets
-- 🔴 Red circles = Obstacles to avoid
+- 🔴 Red circles = Static obstacles in arena
+- 🟠 Orange circles = Sensor-detected obstacles (dynamic, can change)
 - 🟢 Green line = Robot's actual path (trajectory)
 - 🟠 Orange squares = Planned waypoints
 - 🔴 Red dashed line = Path to next waypoint
-- 📊 Status box = State, position, progress, distance to goal
+- 📊 Status box = State, position, progress, distance to goal line
 
 ---
 

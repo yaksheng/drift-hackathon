@@ -27,6 +27,7 @@ from target_detection import TargetDetector, Target
 from robot_localization import RobotLocalizer, RobotPose
 from path_planner import PathPlanner, Waypoint
 from navigation_controller import NavigationController, NavigationState
+from line_detection import LineDetector, DetectedLine
 
 
 class AutonomousNavigation:
@@ -60,6 +61,7 @@ class AutonomousNavigation:
         
         # Initialize modules
         self.target_detector = TargetDetector()
+        self.line_detector = LineDetector(line_color='blue')  # Detect blue lines
         self.robot_localizer = RobotLocalizer(robot_marker_color=robot_marker_color)
         self.path_planner = PathPlanner()
         self.navigation_controller: Optional[NavigationController] = None
@@ -67,6 +69,8 @@ class AutonomousNavigation:
         # State
         self.running = False
         self.current_targets: list[Target] = []
+        self.current_lines: list[DetectedLine] = []
+        self.goal_line: Optional[DetectedLine] = None  # The blue line goal at top
         self.current_pose: Optional[RobotPose] = None
         self.world_transform: Optional[np.ndarray] = None
         
@@ -146,6 +150,33 @@ class AutonomousNavigation:
         
         return targets
     
+    def detect_goal_line(self, frame: np.ndarray) -> Optional[DetectedLine]:
+        """
+        Detect the blue goal line at the top of the arena
+        
+        Args:
+            frame: Input image from overhead camera
+            
+        Returns:
+            DetectedLine for the goal line, or None if not found
+        """
+        # Detect all blue lines
+        lines = self.line_detector.detect_lines(frame, self.world_transform)
+        self.current_lines = lines
+        
+        if not lines:
+            return None
+        
+        # Find the line at the top (highest Y in world coordinates, which is top of arena)
+        # In world coordinates, higher Y = closer to top
+        top_line = max(lines, key=lambda l: l.world_center[1])
+        
+        # Also check if it's near the middle horizontally
+        # For now, use the topmost line as goal
+        self.goal_line = top_line
+        
+        return top_line
+    
     def localize_robot(self, frame: np.ndarray) -> Optional[RobotPose]:
         """Localize robot position"""
         pose = self.robot_localizer.localize(frame)
@@ -175,7 +206,10 @@ class AutonomousNavigation:
                 if self.use_overhead_camera and self.overhead_frame is not None:
                     frame = self.overhead_frame.copy()
                     
-                    # Detect targets
+                    # Detect blue goal line at top (main objective)
+                    goal_line = self.detect_goal_line(frame)
+                    
+                    # Detect targets (for intermediate waypoints)
                     targets = self.detect_targets(frame)
                     self.current_targets = targets
                     
@@ -183,31 +217,61 @@ class AutonomousNavigation:
                     pose = self.localize_robot(frame)
                     self.current_pose = pose
                     
-                    # Select target (closest one)
-                    if targets and pose:
-                        # Find closest target
+                    # Determine goal position
+                    goal_pos = None
+                    
+                    if goal_line and pose:
+                        # Use the center of the blue line as goal
+                        goal_pos = goal_line.world_center
+                        print(f"🎯 Goal line detected at: ({goal_pos[0]:.2f}, {goal_pos[1]:.2f})")
+                        
+                        # Check if reached goal line
+                        distance_to_line = self.distance((pose.x, pose.y), goal_pos)
+                        if distance_to_line < 0.15:  # Within 15cm
+                            self.navigation_controller.state = NavigationState.ARRIVED
+                            self.robot.stop()
+                            await self.robot.send()
+                            print(f"\n🎯 SUCCESS: Reached blue line at top! (distance: {distance_to_line:.2f}m)")
+                            print("✅ Challenge complete: Navigated to middle blue line while avoiding obstacles!")
+                            break
+                    
+                    # If no goal line detected, use closest target as fallback
+                    if goal_pos is None and targets and pose:
                         closest_target = min(targets, 
                                             key=lambda t: self.distance(
                                                 (pose.x, pose.y), 
                                                 t.world_pos
                                             ))
-                        
+                        goal_pos = closest_target.world_pos
+                        print(f"⚠️  Goal line not detected, using target: ({goal_pos[0]:.2f}, {goal_pos[1]:.2f})")
+                    
+                    # Update obstacles dynamically from sensor data
+                    if pose and self.robot:
+                        self.path_planner.update_obstacle_from_sensors(
+                            (pose.x, pose.y),
+                            pose.theta,
+                            self.robot.ultrasonic_distance,
+                            self.robot.ir_left,
+                            self.robot.ir_right
+                        )
+                    
+                    # Set goal and plan path
+                    if goal_pos and pose:
                         # Set target in navigation controller
-                        self.navigation_controller.set_target(closest_target.world_pos)
+                        self.navigation_controller.set_target(goal_pos)
                         
-                        # Plan path
-                        if pose:
-                            self.path_planner.replan_path(
-                                (pose.x, pose.y),
-                                closest_target.world_pos
+                        # Plan path (obstacles are detected dynamically from sensors)
+                        self.path_planner.replan_path(
+                            (pose.x, pose.y),
+                            goal_pos
+                        )
+                        
+                        # Get next waypoint
+                        waypoint = self.path_planner.get_next_waypoint()
+                        if waypoint:
+                            self.navigation_controller.set_waypoint(
+                                (waypoint.x, waypoint.y)
                             )
-                            
-                            # Get next waypoint
-                            waypoint = self.path_planner.get_next_waypoint()
-                            if waypoint:
-                                self.navigation_controller.set_waypoint(
-                                    (waypoint.x, waypoint.y)
-                                )
                 
                 # Update navigation controller
                 if self.navigation_controller and self.current_pose:

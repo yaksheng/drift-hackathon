@@ -81,23 +81,31 @@ class SimulatedNavigation:
             self.robot.add_line(0.0, 2.0, 2.5, 2.0)  # Line 2
             self.robot.add_line(0.0, 3.0, 2.5, 3.0)  # Line 3
         
+        # Main goal: Blue line at the top (middle of arena width)
+        # This represents the goal line from the overhead camera
+        self.goal_line = (1.25, goal_y)  # Center X, top Y - this is the blue line goal
+        self.goal_line_y = goal_y
+        
         # Add default targets if none provided
-        # Main goal is at the top of the arena
+        # Main goal is the blue line at top - represented as a target for navigation
         if target_positions is None:
             target_positions = [
-                (1.25, goal_y, 'green'),  # Main goal at top center
-                (2.0, 3.2, 'blue'),       # Intermediate waypoint
-                (0.5, 2.8, 'blue'),      # Intermediate waypoint
+                (1.25, goal_y, 'blue'),  # Main goal: blue line at top center
+                (2.0, 3.2, 'blue'),      # Intermediate waypoint
+                (0.5, 2.8, 'blue'),     # Intermediate waypoint
             ]
         
         self.target_positions = target_positions
-        self.main_goal = target_positions[0]  # Primary goal at top
+        self.main_goal = target_positions[0]  # Primary goal: blue line at top
         
         # Create visualizer
         self.visualizer = ArenaVisualizer(arena_bounds)
         self.visualizer.draw_arena()
         self.visualizer.draw_obstacles(self.robot.obstacles)
         self.visualizer.draw_lines(self.robot.lines, stop_line_index=stop_at_line - 1)
+        
+        # Draw goal blue line at top
+        self.visualizer.draw_goal_line((0.0, goal_y), (2.5, goal_y))
         
         # Create mock robot interface
         self.mock_robot = MockGalaxyRVR(self.robot)
@@ -122,11 +130,11 @@ class SimulatedNavigation:
         print("=" * 60)
         print("Simulated Navigation System")
         print("=" * 60)
-        print(f"\n🎯 Objective: Reach top of arena (y = {self.goal_y:.1f}m)")
+        print(f"\n🎯 Objective: Reach middle blue line at top (y = {self.goal_y:.1f}m)")
         print(f"📍 Initial position: {self.robot.get_position()}")
-        print(f"🎯 Main goal: {self.main_goal[:2]}")
+        print(f"🎯 Main goal: Blue line at ({self.goal_line[0]:.2f}, {self.goal_line[1]:.2f})")
         print(f"📍 Targets: {len(self.target_positions)}")
-        print(f"🚧 Obstacles: {len(self.robot.obstacles)}")
+        print(f"🚧 Obstacles: {len(self.robot.obstacles)} (dynamic - can change)")
         print(f"📏 Lines: {len(self.robot.lines)} (milestone tracking)")
         print(f"   - Line {self.stop_at_line} crossing will be tracked")
         print()
@@ -206,9 +214,9 @@ class SimulatedNavigation:
         print("\n🎮 Controls:")
         print("  - Close window to stop")
         print("  - Watch the robot navigate to the top!")
-        print("  - Green circle = Main goal at top")
+        print("  - Blue line at top = Main goal (middle blue line)")
         print("  - Green line = Robot's path")
-        print("  - Red circles = Obstacles to avoid")
+        print("  - Red circles = Obstacles to avoid (dynamic)")
         print()
         
         self.running = True
@@ -229,13 +237,19 @@ class SimulatedNavigation:
                 pose = self.localize_robot_simulated()
                 self.current_pose = pose
                 
-                # Check if reached top of arena (main objective)
-                if pose and pose.y >= self.goal_y - 0.1:  # Within 10cm of top
-                    self.navigation_controller.state = NavigationState.ARRIVED
-                    self.robot.set_motors(0, 0)
-                    print(f"\n🎯 SUCCESS: Reached top of arena! (y = {pose.y:.2f})")
-                    print("✅ Challenge complete: Navigated to top while avoiding obstacles!")
-                    break
+                # Check if reached blue line at top (main objective)
+                # Check if robot is at the goal line Y coordinate and near center X
+                if pose:
+                    distance_to_line_y = abs(pose.y - self.goal_line_y)
+                    distance_to_center_x = abs(pose.x - self.goal_line[0])
+                    
+                    # Success if within 15cm of line Y and within 30cm of center X
+                    if distance_to_line_y < 0.15 and distance_to_center_x < 0.30:
+                        self.navigation_controller.state = NavigationState.ARRIVED
+                        self.robot.set_motors(0, 0)
+                        print(f"\n🎯 SUCCESS: Reached blue line at top! (y = {pose.y:.2f}, x = {pose.x:.2f})")
+                        print("✅ Challenge complete: Navigated to middle blue line while avoiding obstacles!")
+                        break
                 
                 # Check line crossing (milestone tracking)
                 line_crossed = self.check_line_stopping()
@@ -288,6 +302,27 @@ class SimulatedNavigation:
                     self.mock_robot.set_motors(command.left_motor, command.right_motor)
                     self.mock_robot.set_servo(command.servo_angle)
                     await self.mock_robot.send()
+                
+                # Update obstacles dynamically in simulation (from sensor readings)
+                if self.current_pose and self.robot:
+                    state = self.robot.get_state()
+                    # Update path planner with sensor obstacles
+                    self.path_planner.update_obstacle_from_sensors(
+                        (self.current_pose.x, self.current_pose.y),
+                        self.current_pose.theta,
+                        state.ultrasonic_distance,
+                        state.ir_left,
+                        state.ir_right
+                    )
+                    # Update visualizer with current obstacles
+                    self.visualizer.draw_obstacles(self.robot.obstacles)
+                    # Also draw path planner obstacles (sensor-detected)
+                    if self.path_planner.obstacles:
+                        sensor_obstacles = [(obs.x, obs.y, obs.radius) 
+                                          for obs in self.path_planner.obstacles 
+                                          if obs.confidence < 0.9]
+                        if sensor_obstacles:
+                            self.visualizer.draw_sensor_obstacles(sensor_obstacles)
                 
                 # Update visualization
                 self._update_visualization()
@@ -347,11 +382,14 @@ class SimulatedNavigation:
         
         # Update status
         state_name = self.navigation_controller.get_state().value if self.navigation_controller else "UNKNOWN"
-        status = f"🎯 Objective: Reach top (y={self.goal_y:.1f}m)\n"
+        status = f"🎯 Goal: Blue line at top (y={self.goal_y:.1f}m)\n"
         status += f"State: {state_name}\n"
         if self.current_pose:
             status += f"Position: ({self.current_pose.x:.2f}, {self.current_pose.y:.2f})m\n"
-            status += f"Distance to top: {self.goal_y - self.current_pose.y:.2f}m\n"
+            dist_to_line = abs(self.current_pose.y - self.goal_line_y)
+            dist_to_center = abs(self.current_pose.x - self.goal_line[0])
+            status += f"Dist to line: {dist_to_line:.2f}m\n"
+            status += f"Dist to center: {dist_to_center:.2f}m\n"
             status += f"Progress: {(self.current_pose.y / self.goal_y * 100):.1f}%\n"
         status += f"Lines crossed: {sum(self.line_crossed)}/{len(self.robot.lines)}\n"
         if self.path_planner.current_path:
