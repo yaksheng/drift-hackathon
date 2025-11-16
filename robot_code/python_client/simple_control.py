@@ -20,7 +20,7 @@ async def main():
 
     # Configuration
     robot_ip = "192.168.1.216"
-    robot_ip = "192.168.1.113" ## 2nd robot
+    robot_ip = "192.168.0.113" ## 2nd robot
     # robot_ip = "192.168.4.1"
     port = 8765
 

@@ -441,6 +441,8 @@ async def main():
                        help='Initial orientation (radians)')
     parser.add_argument('--max-iterations', type=int, default=1000,
                        help='Maximum navigation iterations')
+    parser.add_argument('--no-wait', action='store_true',
+                       help='Do not wait for user input at end (for automated testing)')
     
     args = parser.parse_args()
     
@@ -461,8 +463,12 @@ async def main():
         await nav.navigation_loop(max_iterations=args.max_iterations)
     finally:
         await nav.shutdown()
-        print("\nPress Enter to close...")
-        input()
+        if not args.no_wait:
+            print("\nPress Enter to close...")
+            try:
+                input()
+            except (EOFError, KeyboardInterrupt):
+                pass  # Non-interactive mode or interrupted
 
 
 if __name__ == "__main__":

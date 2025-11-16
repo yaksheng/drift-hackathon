@@ -436,6 +436,9 @@ class AutonomousNavigation:
                     # Apply command to robot
                     self.robot.set_motors(command.left_motor, command.right_motor)
                     self.robot.set_servo(command.servo_angle)
+                    # Force send by resetting tracking variables to ensure command is sent
+                    self.robot._last_left_motor = None
+                    self.robot._last_right_motor = None
                     await self.robot.send()
                 
                 # Update path visualization

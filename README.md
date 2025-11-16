@@ -41,6 +41,10 @@ drift-hackathon/
 │   ├── dead_reckoning.py     # Odometry for camera delay handling
 │   ├── path_visualization.py # Path overlay on camera feed
 │   ├── line_detection.py     # Line detection module
+│   ├── obstacle_detection.py # Obstacle detection from camera feed
+│   ├── line_following_navigation.py # Line following navigation system
+│   ├── simulate_line_following.py # Simulation with real camera feed
+│   ├── path_visualizer_camera.py # Path visualization on camera feed
 │   ├── main.py              # Main entry point
 │   ├── example_usage.py     # Usage examples
 │   └── requirements.txt     # Dependencies
@@ -293,8 +297,12 @@ drift-hackathon/
     ├── robot_localization.py         # Position tracking
     ├── path_planner.py               # Path planning ✅
     ├── obstacle_map.py               # Pre-mapped obstacle management ✅
+    ├── obstacle_detection.py         # Obstacle detection from camera feed ✅
     ├── navigation_controller.py      # Control system
     ├── line_detection.py             # Blue line detection ✅
+    ├── line_following_navigation.py  # Line following navigation system ✅
+    ├── simulate_line_following.py     # Simulation with real camera feed ✅
+    ├── path_visualizer_camera.py     # Path visualization on camera feed ✅
     ├── main.py                       # Main entry point (real robot)
     ├── example_usage.py              # Usage examples
     ├── simulator.py                  # Robot physics simulator ✅
@@ -1415,7 +1423,74 @@ See `autonomous_navigation/PRE_MAPPED_OBSTACLES.md` for detailed documentation.
 
 ---
 
+### Line Following Navigation System ✅
+
+**New Features**:
+
+1. **Line Following Navigation** (`line_following_navigation.py`):
+   - Detects lines from overhead camera feed
+   - Finds top three lines and selects middle line as goal
+   - Plans path from robot to middle line while avoiding obstacles
+   - Uses real-world position from camera feed at `http://192.168.0.21:8000/`
+   - Integrates obstacle detection from camera feed
+
+2. **Obstacle Detection from Camera** (`obstacle_detection.py`):
+   - Detects colored obstacles (red, blue, green, yellow, orange) from camera feed
+   - Uses HSV color filtering and contour detection
+   - Converts obstacles to world coordinates for path planning
+   - Only uses obstacles actually visible in camera feed (no arbitrary obstacles)
+   - Provides confidence scores for detected obstacles
+
+3. **Simulation with Real Camera Feed** (`simulate_line_following.py`):
+   - Simulation environment that uses real camera feed for obstacle detection
+   - Can use synthetic images or real camera feed from `http://192.168.0.21:8000/`
+   - Visualizes detected obstacles from camera feed in matplotlib overlay
+   - Matches real camera feed appearance (white background, actual obstacles)
+   - Supports `--camera-url` argument to use real camera feed
+
+4. **Path Visualizer** (`path_visualizer_camera.py`):
+   - Captures current frame from camera feed
+   - Detects lines and finds top three lines
+   - Selects middle line of top three as goal
+   - Detects robot position and obstacles
+   - Plans best path from robot to middle line
+   - Draws path visualization directly on camera image using OpenCV
+   - Saves visualization as `path_visualization.jpg`
+   - Shows: robot position (green), goal (yellow), path (green line), obstacles (red), lines (blue)
+
+**Usage**:
+```bash
+# Visualize path to middle line from camera feed
+cd autonomous_navigation
+python3 path_visualizer_camera.py
+
+# Run line following simulation with real camera feed
+python3 simulate_line_following.py --camera-url http://192.168.0.21:8000/ --max-iterations 150
+
+# Run line following navigation on real robot
+python3 line_following_navigation.py --robot-ip 192.168.0.113 --camera-url http://192.168.0.21:8000/
+```
+
+**Key Features**:
+- ✅ Uses real camera feed for obstacle detection (no arbitrary obstacles)
+- ✅ Detects obstacles dynamically from camera feed
+- ✅ Visualizes path on actual camera image (not matplotlib)
+- ✅ Finds best path to middle of top three lines
+- ✅ Integrates with existing path planning and navigation systems
+
+**Files Created**:
+- `obstacle_detection.py`: Obstacle detection from camera feed
+- `line_following_navigation.py`: Line following navigation system
+- `simulate_line_following.py`: Simulation with real camera feed
+- `path_visualizer_camera.py`: Path visualization on camera feed
+
+**Files Modified**:
+- `simulate_line_following.py`: Updated to use real camera feed for obstacles
+- `line_following_navigation.py`: Integrated obstacle detection from camera
+
+---
+
 **Status**: ✅ Phase 3 Complete - All Advanced Features Implemented
-**Last Updated**: Phase 3 features (hybrid vision, error recovery, performance optimization) implemented
+**Last Updated**: Line following navigation system with real camera feed integration
 **Next Steps**: Phase 4 - Testing & Refinement, Real Robot Testing
 

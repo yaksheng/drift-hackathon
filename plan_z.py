@@ -21,7 +21,7 @@ async def main():
 
     # Configuration
     # robot_ip = "192.168.1.216"
-    robot_ip = "192.168.1.113" ## 2nd robot
+    robot_ip = "192.168.0.113" ## 2nd robot
     # robot_ip = "192.168.4.1"
     port = 8765
 
@@ -37,15 +37,35 @@ async def main():
 
     # --- Autonomous Command Section ---
     try:
-        print("Command: Moving forward at speed 60...")
-        
-        # Tell the robot to move forward at a speed of 60.
-        # This speed is based on the "normal_speed=60" from your original script.
-        robot.forward(speed=60)
+        # First, ensure we're in a clean state by sending stop
+        print("Resetting robot state...")
+        robot.stop()
         await robot.send()
+        await asyncio.sleep(0.2)
+        
+        # Set servo to ensure mode is set (this helps trigger MODE_APP_CONTROL)
+        robot.set_servo(90)
+        
+        print("Command: Moving forward at speed 80...")
+        # Use set_motors directly with a higher speed to ensure movement
+        # Speed 80 should be well above the minimum threshold
+        robot.set_motors(80, 80)
+        print(f"Motor values: left={robot.left_motor}, right={robot.right_motor}")
+        await robot.send()
+        print("Command sent!")
 
         print("Waiting for 9 seconds...")
-        await asyncio.sleep(9)
+        # Send commands continuously to keep the robot moving
+        # The robot may need periodic updates to maintain movement
+        start_time = asyncio.get_event_loop().time()
+        while (asyncio.get_event_loop().time() - start_time) < 9.0:
+            # Force send by resetting tracking variables
+            robot._last_left_motor = None
+            robot._last_right_motor = None
+            # Ensure motors are still set correctly
+            robot.set_motors(80, 80)
+            await robot.send()  # Resend command periodically
+            await asyncio.sleep(0.1)  # Send every 100ms
 
         print("Command: Stopping robot...")
         # Tell the robot to stop

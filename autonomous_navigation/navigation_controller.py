@@ -6,6 +6,7 @@ Manages navigation states and sensor fusion.
 """
 
 import math
+import time
 from typing import Optional, Tuple
 from enum import Enum
 from dataclasses import dataclass
@@ -114,13 +115,24 @@ class NavigationController:
         self.target_position: Optional[Tuple[float, float]] = None
         self.current_waypoint: Optional[Tuple[float, float]] = None
         
-        # PID controllers
-        self.heading_pid = PIDController(kp=2.0, ki=0.0, kd=0.5)
+        # PID controllers - Reduced gains to prevent oscillation
+        self.heading_pid = PIDController(kp=1.0, ki=0.0, kd=0.2)
         self.distance_pid = PIDController(kp=1.0, ki=0.0, kd=0.1)
+        
+        # Motor calibration - compensate for motor differences
+        self.left_motor_compensation = 1.0  # Multiplier for left motor
+        self.right_motor_compensation = 1.0  # Multiplier for right motor
+        
+        # Dead zone for heading error (radians) - move straight if error is small
+        self.heading_dead_zone = 0.1  # ~6 degrees
         
         # Sensor thresholds
         self.ultrasonic_threshold = 20.0  # cm
         self.ir_threshold = 1  # obstacle detected
+        
+        # Search timeout to prevent getting stuck
+        self.search_start_time = None
+        self.search_timeout = 3.0  # seconds
         
     def set_target(self, target: Tuple[float, float]):
         """Set target position"""
@@ -132,7 +144,8 @@ class NavigationController:
         """Set current waypoint"""
         self.current_waypoint = waypoint
         if self.state == NavigationState.SEARCHING:
-            self.state = NavigationState.TRACKING
+            self.state = NavigationState.NAVIGATING  # Go directly to navigating
+            self.search_start_time = None  # Reset search timer
     
     def update(self, 
               current_pos: Tuple[float, float],
@@ -160,8 +173,22 @@ class NavigationController:
             return ControlCommand(0, 0, 90)
         
         elif self.state == NavigationState.SEARCHING:
-            # Rotate in place to search for target
-            return ControlCommand(-30, 30, 90)  # Turn left
+            # Check if we've been searching too long
+            if self.search_start_time is None:
+                self.search_start_time = time.time()
+            elif time.time() - self.search_start_time > self.search_timeout:
+                # Timeout - try moving forward to find target
+                self.state = NavigationState.NAVIGATING
+                self.search_start_time = None
+                # If we have a waypoint, use it; otherwise move forward
+                if self.current_waypoint:
+                    return self.navigate_to_waypoint(current_pos, current_theta, dt)
+                else:
+                    # Move forward slowly to search
+                    return ControlCommand(40, 40, 90)
+            
+            # Rotate in place to search for target (slower rotation)
+            return ControlCommand(-20, 20, 90)  # Turn left slowly
         
         elif self.state == NavigationState.TRACKING:
             # Track target, prepare to navigate
@@ -238,8 +265,15 @@ class NavigationController:
         while heading_error < -math.pi:
             heading_error += 2 * math.pi
         
-        # PID control for heading
-        heading_correction = self.heading_pid.compute(heading_error, dt)
+        # PID control for heading - but use dead zone for small errors
+        if abs(heading_error) < self.heading_dead_zone:
+            # Small error - move straight, no correction needed
+            heading_correction = 0.0
+        else:
+            heading_correction = self.heading_pid.compute(heading_error, dt)
+            # Limit maximum correction to prevent spinning
+            max_correction = 20.0  # Maximum speed difference between motors
+            heading_correction = max(-max_correction, min(max_correction, heading_correction))
         
         # Speed control based on distance
         base_speed = min(self.max_speed, max(self.min_speed, 
@@ -249,6 +283,10 @@ class NavigationController:
         # Positive heading_correction means turn right
         left_speed = int(base_speed - heading_correction)
         right_speed = int(base_speed + heading_correction)
+        
+        # Apply motor compensation to ensure straight movement
+        left_speed = int(left_speed * self.left_motor_compensation)
+        right_speed = int(right_speed * self.right_motor_compensation)
         
         # Clamp speeds
         left_speed = max(-100, min(100, left_speed))
@@ -309,6 +347,7 @@ class NavigationController:
         self.current_waypoint = None
         self.heading_pid.reset()
         self.distance_pid.reset()
+        self.search_start_time = None
     
     def get_state(self) -> NavigationState:
         """Get current navigation state"""
