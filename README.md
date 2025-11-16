@@ -256,9 +256,14 @@ drift-hackathon/
     ├── robot_localization.py         # Position tracking
     ├── path_planner.py               # Path planning
     ├── navigation_controller.py      # Control system
-    ├── main.py                       # Main entry point
+    ├── main.py                       # Main entry point (real robot)
     ├── example_usage.py              # Usage examples
-    └── requirements.txt             # Dependencies
+    ├── simulator.py                  # Robot physics simulator ✅
+    ├── simulator_visualization.py    # Arena visualization ✅
+    ├── mock_robot.py                 # Mock robot interface ✅
+    ├── simulate_navigation.py        # Simulation main script ✅
+    ├── SIMULATION_README.md          # Simulation documentation ✅
+    └── requirements.txt              # Dependencies
 ```
 
 ## 🔧 Key Modules Implementation
@@ -493,6 +498,285 @@ Camera Frame → [Target Detection + Localization] → [Path Planning] →
 [Navigation Controller] → Motor Commands → Robot → Sensor Feedback → Loop
 ```
 
+---
+
+## 🎮 Simulation System Implementation
+
+Since physical testing time is limited and Drift AI simulation access is unavailable, a complete simulation environment has been implemented to test navigation algorithms virtually. The simulation system provides a hardware-free testing platform that mimics the real robot's behavior.
+
+### Overview
+
+The simulation system consists of four main components that work together to create a realistic testing environment:
+
+1. **Robot Physics Simulator** (`simulator.py`) - Core physics and sensor simulation
+2. **Arena Visualizer** (`simulator_visualization.py`) - Real-time visualization
+3. **Mock Robot Interface** (`mock_robot.py`) - Compatibility layer
+4. **Simulation Controller** (`simulate_navigation.py`) - Integration and challenge logic
+
+### 1. Robot Physics Simulator (`simulator.py`) ✅
+
+**Purpose**: Simulate the GalaxyRVR robot's physical behavior, sensors, and interactions with the environment.
+
+**Implementation Details**:
+
+- **Differential Drive Kinematics**: Implements realistic differential drive robot motion using the unicycle model:
+  ```
+  Linear velocity:  v = (v_left + v_right) / 2
+  Angular velocity: ω = (v_right - v_left) / wheel_base
+  ```
+  
+  For curved motion, uses the Instantaneous Center of Curvature (ICC) method:
+  ```
+  ICC = (x - R·sin(θ), y + R·cos(θ))
+  R = v / ω  (radius of curvature)
+  ```
+  
+  The robot's position is updated using rotation matrices around the ICC, providing accurate curved motion simulation.
+
+- **Motor Speed Conversion**: Converts motor commands (-100 to 100) to wheel speeds in m/s:
+  ```
+  wheel_speed = (motor_command / 100) × max_speed
+  ```
+  Where `max_speed` is configurable (default: 0.5 m/s).
+
+- **Sensor Simulation**:
+  - **Ultrasonic Sensor**: Casts a forward ray (2m length) and calculates distance to nearest obstacle using point-to-line-segment distance. Returns distance in centimeters.
+  - **IR Sensors**: Checks for obstacles at left/right side positions (15cm offset from robot center) using circular collision detection.
+  - **Battery Voltage**: Simulated constant voltage (7.4V).
+
+- **Obstacle Collision**: Simple circular collision detection:
+  ```
+  distance_to_obstacle < (obstacle_radius + robot_radius)
+  ```
+  Robot is kept within arena bounds by clamping position to boundaries.
+
+- **Line Crossing Detection**: Implements robust line crossing detection using:
+  1. **Line Segment Intersection**: Uses counter-clockwise (CCW) test to detect if robot's path segment intersects the line segment:
+     ```
+     segments_intersect = (CCW(A, C, D) ≠ CCW(B, C, D)) AND 
+                          (CCW(A, B, C) ≠ CCW(A, B, D))
+     ```
+  2. **Proximity Fallback**: If robot is within 5cm of line, checks which side of line robot is on (handles cases where robot "jumps over" line in one update step).
+  
+  Tracks previous position to detect actual crossings, not just proximity.
+
+- **State Management**: Maintains robot state including position, orientation, motor commands, and sensor readings. Updates at configurable time steps (default: real-time).
+
+**Key Classes**:
+- `SimulatedRobotState`: Dataclass containing all robot state variables
+- `SimulatedRobot`: Main simulator class with physics, sensors, and environment interaction
+
+**Physical Parameters**:
+- Robot radius: 0.15m
+- Wheel base: 0.12m (distance between wheels)
+- Wheel radius: 0.03m
+- Maximum speed: 0.5 m/s (configurable)
+
+---
+
+### 2. Arena Visualizer (`simulator_visualization.py`) ✅
+
+**Purpose**: Provide real-time visualization of the simulation for debugging and monitoring.
+
+**Implementation Details**:
+
+- **Matplotlib Integration**: Uses matplotlib for real-time plotting with interactive mode (`plt.ion()`) for live updates.
+
+- **Arena Rendering**:
+  - Draws arena boundaries as a rectangle
+  - Grid overlay for reference
+  - Configurable figure size and axis limits
+
+- **Dynamic Elements** (updated each frame):
+  - **Robot**: Blue circle with orientation arrow showing heading direction
+  - **Targets**: Colored scatter points (one per target)
+  - **Obstacles**: Red circles with semi-transparent fill
+  - **Lines**: Blue lines (regular), green dashed line (target line to stop at)
+  - **Path**: Green dashed line showing planned navigation path
+  - **Status Box**: Text overlay showing current state, position, orientation, and line crossing status
+
+- **Efficient Updates**: Uses object removal and recreation for dynamic elements to avoid memory leaks. Clears and redraws only changed elements each frame.
+
+- **Visualization Features**:
+  - Color coding: Robot (blue), targets (various colors), obstacles (red), target line (green)
+  - Arrow indicates robot orientation
+  - Path history tracking shows robot's trajectory
+  - Status information overlay
+
+- **Performance**: Updates at ~10Hz, suitable for real-time monitoring without significant performance impact.
+
+**Key Classes**:
+- `ArenaVisualizer`: Main visualization class with methods for drawing all arena elements
+
+**Usage**:
+```python
+visualizer = ArenaVisualizer(arena_bounds)
+visualizer.draw_arena()
+visualizer.draw_robot(robot_state)
+visualizer.draw_targets(targets)
+visualizer.update_status("Status text")
+plt.show()
+```
+
+---
+
+### 3. Mock Robot Interface (`mock_robot.py`) ✅
+
+**Purpose**: Provide a drop-in replacement for the real `GalaxyRVR` class, allowing existing navigation code to work unchanged in simulation.
+
+**Implementation Details**:
+
+- **Interface Compatibility**: Implements the same public API as `GalaxyRVR`:
+  - `connect()`, `disconnect()`, `send()`
+  - `set_motors()`, `set_servo()`, `stop()`
+  - `forward()`, `backward()`, `turn_left()`, `turn_right()`
+  - Sensor attributes: `battery_voltage`, `ultrasonic_distance`, `ir_left`, `ir_right`
+
+- **Command Translation**: Converts navigation commands to simulator actions:
+  ```python
+  # Navigation code calls:
+  robot.set_motors(left, right)
+  await robot.send()
+  
+  # Mock robot translates to:
+  simulated_robot.set_motors(left, right)
+  simulated_robot.update()  # Apply physics
+  ```
+
+- **Sensor Synchronization**: Reads sensor values from simulated robot state and exposes them through the same interface:
+  ```python
+  self.ultrasonic_distance = simulated_robot.state.ultrasonic_distance
+  self.ir_left = simulated_robot.state.ir_left
+  self.ir_right = simulated_robot.state.ir_right
+  ```
+
+- **Async Compatibility**: Implements async methods (`connect()`, `disconnect()`, `send()`) to match real robot interface, even though simulation is synchronous.
+
+- **Seamless Integration**: Navigation modules (`NavigationController`, etc.) work without modification - they don't know they're talking to a simulator instead of a real robot.
+
+**Key Classes**:
+- `MockGalaxyRVR`: Mock robot class that wraps `SimulatedRobot` and provides `GalaxyRVR`-compatible interface
+
+**Design Pattern**: Adapter pattern - adapts simulator interface to match real robot interface.
+
+---
+
+### 4. Simulation Controller (`simulate_navigation.py`) ✅
+
+**Purpose**: Integrate all simulation components and implement the line stopping challenge logic.
+
+**Implementation Details**:
+
+- **System Integration**: 
+  - Creates and initializes all components (simulator, visualizer, mock robot, navigation modules)
+  - Sets up default arena configuration (bounds, obstacles, lines, targets)
+  - Configures challenge parameters (which line to stop at)
+
+- **Line Stopping Challenge**: 
+  - Tracks which lines have been crossed using boolean array: `line_crossed = [False, False, False]`
+  - Checks line crossings each iteration using `robot.check_line_crossing(line_index)`
+  - When target line is crossed:
+    1. Sets navigation state to `ARRIVED`
+    2. Stops robot motors
+    3. Displays success message
+    4. Exits navigation loop
+
+- **Navigation Loop** (runs at ~10Hz):
+  1. **Target Detection**: Uses simulated target positions (known a priori in simulation)
+  2. **Robot Localization**: Uses actual simulator position (perfect localization in simulation)
+  3. **Target Selection**: Selects closest target to current position
+  4. **Path Planning**: Plans path from robot to target
+  5. **Control Update**: Updates navigation controller, gets motor commands
+  6. **Robot Control**: Sends commands to mock robot (which updates simulator)
+  7. **Line Check**: Checks if target line has been crossed
+  8. **Visualization**: Updates display with current state
+
+- **Configuration**: Supports command-line arguments:
+  - `--stop-at-line`: Which line to stop at (1, 2, or 3) - **Key challenge parameter**
+  - `--initial-x`, `--initial-y`, `--initial-theta`: Starting position
+  - `--max-iterations`: Maximum loop iterations
+
+- **Default Arena Setup**:
+  - Arena: 2.5m × 4.0m
+  - Lines: 3 horizontal lines at y = 1.0, 2.0, 3.0 meters
+  - Obstacles: 2 obstacles at (1.0, 2.0) radius 0.2m and (1.5, 1.5) radius 0.15m
+  - Targets: 3 blue targets at various positions
+
+- **Error Handling**: Graceful shutdown on keyboard interrupt, exception handling with traceback.
+
+**Key Features**:
+- Challenge-compliant: Implements line stopping requirement
+- Configurable: Easy to adjust arena layout and parameters
+- Realistic: Uses same navigation modules as real robot
+- Visual: Real-time visualization for debugging
+
+**Usage Example**:
+```bash
+# Stop at second line
+python simulate_navigation.py --stop-at-line 2
+
+# Custom starting position
+python simulate_navigation.py --stop-at-line 3 --initial-x 0.3 --initial-y 0.5
+```
+
+---
+
+## 🔗 Simulation Integration with Navigation Modules
+
+The simulation system is designed to work seamlessly with the existing navigation modules:
+
+### Compatibility Layer
+
+```
+Navigation Modules (unchanged)
+    ↓
+MockGalaxyRVR (adapter)
+    ↓
+SimulatedRobot (physics)
+    ↓
+Visualization (display)
+```
+
+### Module Usage in Simulation
+
+1. **Target Detection**: Works with simulated target positions (known coordinates)
+2. **Robot Localization**: Uses perfect localization (simulator provides exact position)
+3. **Path Planner**: Plans paths using simulated obstacles and arena bounds
+4. **Navigation Controller**: Uses mock robot interface (same as real robot)
+5. **Main Loop**: Same control flow as real robot, but with simulated environment
+
+### Advantages
+
+- **No Code Changes**: Navigation modules work without modification
+- **Fast Iteration**: Test algorithms quickly without physical setup
+- **Reproducible**: Same conditions every run
+- **Safe**: No risk of damaging hardware
+- **Debuggable**: Perfect sensor readings, known positions
+
+### Limitations
+
+- **Simplified Physics**: Real robot may have different motor characteristics, friction, etc.
+- **Perfect Sensors**: No sensor noise in simulation
+- **Known Environment**: Targets and obstacles are known a priori
+- **No Camera Simulation**: Overhead camera view not simulated (uses known positions)
+
+---
+
+## 📊 Simulation vs Real Robot
+
+| Aspect | Simulation | Real Robot |
+|--------|------------|------------|
+| **Physics** | Idealized differential drive | Real motor characteristics, friction |
+| **Sensors** | Perfect readings | Noise, calibration errors |
+| **Localization** | Exact position known | Vision-based, estimation errors |
+| **Target Detection** | Known positions | Computer vision required |
+| **Obstacles** | Known positions | Must be detected |
+| **Speed** | Instant iteration | Physical time required |
+| **Cost** | Free | Hardware, time, risk |
+| **Reproducibility** | Perfect | Varies with conditions |
+
+**Recommendation**: Use simulation for algorithm development and initial testing, then validate on real robot.
+
 ## 🎮 Usage
 
 ### Basic Robot Control
@@ -508,6 +792,8 @@ python webcam_stream.py --transform
 ```
 
 ### Autonomous Navigation ✅
+
+#### Real Robot
 ```bash
 cd autonomous_navigation
 
@@ -523,6 +809,26 @@ python main.py --robot-ip 192.168.1.216 \
 # Without overhead camera (onboard vision only)
 python main.py --robot-ip 192.168.1.216 --no-overhead
 ```
+
+#### Simulation (Recommended for Testing) ✅
+```bash
+cd autonomous_navigation
+
+# Stop at first line (default)
+python simulate_navigation.py --stop-at-line 1
+
+# Stop at second line
+python simulate_navigation.py --stop-at-line 2
+
+# Stop at third line
+python simulate_navigation.py --stop-at-line 3
+
+# Custom starting position
+python simulate_navigation.py --stop-at-line 2 \
+    --initial-x 0.3 --initial-y 0.5 --initial-theta 0.0
+```
+
+**Note**: Simulation allows testing without physical hardware. See `SIMULATION_README.md` for details.
 
 ## 📊 Performance Metrics
 
@@ -570,7 +876,7 @@ Initial hackathon code provided by Drift.
 
 ---
 
-**Status**: ✅ Phase 2 Complete - Core Navigation System Implemented
-**Last Updated**: Implementation of five key modules complete
-**Next Steps**: Phase 3 - Advanced Features & Testing
+**Status**: ✅ Phase 2 Complete - Core Navigation System + Simulation Implemented
+**Last Updated**: Implementation of five key modules and simulation system complete
+**Next Steps**: Phase 3 - Advanced Features & Real Robot Testing
 
