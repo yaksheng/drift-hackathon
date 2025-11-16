@@ -8,12 +8,14 @@ are known positions but may have variable sizes, positions, and colors.
 from typing import List, Tuple, Optional
 import json
 import os
-import sys
 
-# Add parent directory to path for imports
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-
-from autonomous_navigation.path_planner import Obstacle
+# Use relative import when used as module, absolute when standalone
+try:
+    from .path_planner import Obstacle
+except ImportError:
+    import sys
+    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+    from autonomous_navigation.path_planner import Obstacle
 
 
 class ObstacleMap:

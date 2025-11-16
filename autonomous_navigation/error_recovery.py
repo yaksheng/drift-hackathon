@@ -9,7 +9,15 @@ import math
 from typing import Optional, Tuple, List
 from enum import Enum
 from dataclasses import dataclass
-from navigation_controller import NavigationState
+
+# Use relative imports when used as module
+try:
+    from .navigation_controller import NavigationState
+except ImportError:
+    import sys
+    import os
+    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+    from autonomous_navigation.navigation_controller import NavigationState
 
 
 class ErrorType(Enum):

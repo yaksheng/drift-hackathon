@@ -9,8 +9,17 @@ import cv2
 import numpy as np
 from typing import Optional, Tuple, List
 from dataclasses import dataclass
-from target_detection import TargetDetector, Target
-from robot_localization import RobotLocalizer, RobotPose
+
+# Use relative imports when used as module
+try:
+    from .target_detection import TargetDetector, Target
+    from .robot_localization import RobotLocalizer, RobotPose
+except ImportError:
+    import sys
+    import os
+    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+    from autonomous_navigation.target_detection import TargetDetector, Target
+    from autonomous_navigation.robot_localization import RobotLocalizer, RobotPose
 
 
 @dataclass
